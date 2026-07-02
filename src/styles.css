@@ -194,6 +194,17 @@ h2 {
   background: transparent;
 }
 
+.current-month-pill {
+  min-width: 190px;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper-raised);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
 .primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -626,6 +637,184 @@ tr.editing .row-delete,
   color: var(--in);
 }
 
+.year-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.month-action-panel {
+  margin-bottom: 18px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  animation: unfold 0.18s ease;
+}
+
+.month-action-panel strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+}
+
+.month-action-panel p {
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.month-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.danger-panel {
+  background: #fbf1ed;
+  border-color: #d9b3a8;
+}
+
+.danger-button {
+  background: var(--out);
+  border-color: var(--out);
+  color: var(--paper-raised);
+}
+
+.danger-button:hover {
+  background: #8f3524;
+  border-color: #8f3524;
+}
+
+.quiet {
+  background: transparent;
+}
+
+.year-toolbar {
+  margin-bottom: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.year-toolbar select {
+  min-width: 120px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.year-section {
+  display: grid;
+  gap: 10px;
+}
+
+.year-section h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.month-card {
+  min-height: 150px;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  text-align: left;
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+}
+
+.month-card:hover {
+  background: #f9f4e8;
+}
+
+.month-card.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.month-card.empty {
+  color: var(--ink-soft);
+  background: transparent;
+  border-style: dashed;
+}
+
+.month-card-head,
+.month-metric,
+.month-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.month-card-head strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+}
+
+.month-card-head span,
+.month-metric span,
+.month-foot,
+.month-empty-text {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.month-metric strong {
+  font-size: 12px;
+  max-width: 72%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-metric.positive strong {
+  color: var(--in);
+}
+
+.month-metric.negative strong {
+  color: var(--out);
+}
+
+.month-foot {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.month-delete {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  color: var(--ink-soft);
+  opacity: 0;
+}
+
+.month-card:hover .month-delete,
+.month-card.selected .month-delete {
+  opacity: 1;
+}
+
+.month-delete:hover {
+  color: var(--out);
+  border-color: #d9b3a8;
+  background: #fbf1ed;
+}
+
 .empty-state {
   color: var(--ink-soft);
   font-size: 14px;
@@ -649,6 +838,15 @@ tr.editing .row-delete,
     flex-wrap: wrap;
   }
 
+  .month-action-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .month-action-buttons {
+    justify-content: flex-start;
+  }
+
   .overview-grid {
     grid-template-columns: 1fr;
   }
@@ -661,8 +859,13 @@ tr.editing .row-delete,
     justify-content: space-between;
   }
 
-  .month-switcher select {
+  .current-month-pill {
     flex: 1;
+    min-width: 0;
+  }
+
+  .month-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .hero-number {
@@ -676,6 +879,12 @@ tr.editing .row-delete,
   .row-edit,
   .row-delete {
     opacity: 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .month-grid {
+    grid-template-columns: 1fr;
   }
 }
 

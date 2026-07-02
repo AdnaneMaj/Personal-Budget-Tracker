@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import {
   BarChart3,
+  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +32,7 @@ import './styles.css';
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'months', label: 'Months', icon: CalendarDays },
   { id: 'budget', label: 'Budget', icon: WalletCards },
   { id: 'transactions', label: 'Transactions', icon: Coins },
   { id: 'savings', label: 'Savings', icon: BarChart3 }
@@ -38,6 +40,7 @@ const tabs = [
 
 const axisTick = { fontFamily: 'IBM Plex Mono', fontSize: 12, fill: '#6b6559' };
 const tooltipStyle = { fontFamily: 'IBM Plex Mono', border: '1px solid #c9bfa8', borderRadius: 3 };
+const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function nextMonthValue(month, offset) {
   const date = new Date(month.year, month.month - 1 + offset, 1);
@@ -65,18 +68,39 @@ function Shell() {
   const [activeTab, setActiveTab] = useState('overview');
   const [months, setMonths] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(null);
+  const [monthAction, setMonthAction] = useState(null);
   const [currency, setCurrency] = useState('MAD');
   const [error, setError] = useState('');
 
-  async function loadMonths() {
+  async function loadMonths(options = {}) {
     const config = await api('/config');
-    const refreshed = await api('/months');
-    const current = await api('/months/current');
-    const savedId = Number(localStorage.getItem('budget:selectedMonthId'));
+    let refreshed = await api('/months');
+    if (refreshed.length === 0) {
+      const today = new Date();
+      const created = await api('/months', {
+        method: 'POST',
+        body: JSON.stringify({
+          year: today.getFullYear(),
+          month: today.getMonth() + 1,
+          copyFromPrevious: false
+        })
+      });
+      refreshed = await api('/months');
+      options.preferredId = created.id;
+    }
+
+    const savedId = options.preferredId ?? Number(localStorage.getItem('budget:selectedMonthId'));
     const savedMonth = refreshed.find((month) => month.id === savedId);
+    const stillSelected = currentMonth ? refreshed.find((month) => month.id === currentMonth.id) : null;
+    const today = new Date();
+    const calendarMonth = refreshed.find(
+      (month) => month.year === today.getFullYear() && month.month === today.getMonth() + 1
+    );
+    const nextSelected = savedMonth || stillSelected || calendarMonth || refreshed[0] || null;
+
     setCurrency(config.currency);
     setMonths(refreshed);
-    setCurrentMonth(savedMonth || current);
+    setCurrentMonth(nextSelected);
   }
 
   useEffect(() => {
@@ -86,10 +110,16 @@ function Shell() {
   useEffect(() => {
     if (currentMonth?.id) {
       localStorage.setItem('budget:selectedMonthId', String(currentMonth.id));
+    } else {
+      localStorage.removeItem('budget:selectedMonthId');
     }
   }, [currentMonth]);
 
   async function moveMonth(offset) {
+    if (!currentMonth) {
+      setActiveTab('months');
+      return;
+    }
     const target = nextMonthValue(currentMonth, offset);
     const existing = months.find((month) => month.year === target.year && month.month === target.month);
     if (existing) {
@@ -97,32 +127,18 @@ function Shell() {
       return;
     }
 
-    const copyFromPrevious = window.confirm(
-      `Create ${monthLabel(target)} and copy all previous planned values? Choose Cancel to copy only recurring values.`
-    );
-    const created = await api('/months', {
-      method: 'POST',
-      body: JSON.stringify({ ...target, copyFromPrevious })
-    });
-    const refreshed = await api('/months');
-    setMonths(refreshed);
-    setCurrentMonth(created);
+    setMonthAction({ type: 'create', year: target.year, monthNumber: target.month });
+    setActiveTab('months');
   }
 
-  if (!currentMonth) {
-    return (
-      <main className="app loading">
-        <div>{error || 'Loading budget tracker...'}</div>
-      </main>
-    );
-  }
-
-  const Page = {
+  const pages = {
     overview: OverviewPage,
+    months: MonthManagerPage,
     budget: BudgetPage,
     transactions: TransactionsPage,
     savings: SavingsPage
-  }[activeTab];
+  };
+  const Page = pages[activeTab] || (currentMonth ? OverviewPage : MonthManagerPage);
 
   return (
     <main className="app">
@@ -134,16 +150,10 @@ function Shell() {
           <button className="icon-button" title="Previous month" onClick={() => moveMonth(-1)}>
             <ChevronLeft size={18} />
           </button>
-          <select
-            value={currentMonth.id}
-            onChange={(event) => setCurrentMonth(months.find((month) => month.id === Number(event.target.value)))}
-          >
-            {months.map((month) => (
-              <option key={month.id} value={month.id}>
-                {monthLabel(month)}
-              </option>
-            ))}
-          </select>
+          <button className="current-month-pill" onClick={() => setActiveTab('months')}>
+            <CalendarDays size={16} />
+            {currentMonth ? monthLabel(currentMonth) : 'No month selected'}
+          </button>
           <button className="icon-button" title="Next month" onClick={() => moveMonth(1)}>
             <ChevronRight size={18} />
           </button>
@@ -167,7 +177,19 @@ function Shell() {
       </nav>
 
       {error && <div className="error">{error}</div>}
-      <Page month={currentMonth} currency={currency} />
+      <Page
+        month={currentMonth}
+        months={months}
+        currency={currency}
+        onSelectMonth={setCurrentMonth}
+        onOpenMonth={(selectedMonth) => {
+          setCurrentMonth(selectedMonth);
+          setActiveTab('overview');
+        }}
+        onRefreshMonths={loadMonths}
+        monthAction={monthAction}
+        onMonthActionChange={setMonthAction}
+      />
     </main>
   );
 }
@@ -177,8 +199,9 @@ function Shell() {
 /* ---------------------------------------------------------------- */
 
 function OverviewPage({ month, currency }) {
-  const state = useLoad(() => api(`/dashboard/${month.id}`), [month.id]);
+  const state = useLoad(() => (month ? api(`/dashboard/${month.id}`) : Promise.resolve(null)), [month?.id]);
 
+  if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading overview...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
 
@@ -288,6 +311,177 @@ function OverviewPage({ month, currency }) {
 /* category management tucked into a drawer that opens on demand.   */
 /* ---------------------------------------------------------------- */
 
+function MonthManagerPage({
+  month,
+  currency,
+  onSelectMonth,
+  onOpenMonth,
+  onRefreshMonths,
+  monthAction,
+  onMonthActionChange
+}) {
+  const [refresh, setRefresh] = useState(0);
+  const [selectedYear, setSelectedYear] = useState(month?.year || new Date().getFullYear());
+  const state = useLoad(() => api('/months/summary'), [refresh]);
+
+  useEffect(() => {
+    if (month?.year) setSelectedYear(month.year);
+  }, [month?.year]);
+
+  function requestCreateMonth(year, monthNumber) {
+    onMonthActionChange({ type: 'create', year, monthNumber });
+  }
+
+  async function confirmCreateMonth(copyFromPrevious) {
+    const target = { year: monthAction.year, month: monthAction.monthNumber };
+    const created = await api('/months', {
+      method: 'POST',
+      body: JSON.stringify({ ...target, copyFromPrevious })
+    });
+    await onRefreshMonths({ preferredId: created.id });
+    onOpenMonth(created);
+    onMonthActionChange(null);
+    setRefresh((value) => value + 1);
+  }
+
+  function requestDeleteMonth(monthToDelete) {
+    onMonthActionChange({ type: 'delete', targetMonth: monthToDelete });
+  }
+
+  async function confirmDeleteMonth() {
+    const monthToDelete = monthAction.targetMonth;
+    await api(`/months/${monthToDelete.id}`, { method: 'DELETE' });
+    const remaining = await api('/months');
+    const preferredId = month && monthToDelete.id === month.id ? remaining[0]?.id : month?.id;
+    await onRefreshMonths(remaining.length ? { preferredId } : {});
+    onMonthActionChange(null);
+    setRefresh((value) => value + 1);
+  }
+
+  if (state.loading) return <Panel>Loading months...</Panel>;
+  if (state.error) return <Panel tone="error">{state.error}</Panel>;
+
+  const summaries = state.data;
+  const byYearMonth = new Map(summaries.map((item) => [`${item.year}-${item.month}`, item]));
+  const currentYear = new Date().getFullYear();
+  const yearOptions = [...new Set([currentYear, selectedYear, month?.year, ...summaries.map((item) => item.year)].filter(Boolean))]
+    .sort((a, b) => b - a);
+
+  return (
+    <div className="grid">
+      <section className="panel">
+        <div className="section-head">
+          <h2>Months</h2>
+          <span>{month ? `${monthLabel(month)} selected` : 'No month selected'}</span>
+        </div>
+
+        <div className="year-toolbar">
+          <button className="icon-button" title="Previous year" onClick={() => setSelectedYear((year) => year - 1)}>
+            <ChevronLeft size={17} />
+          </button>
+          <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+          <button className="icon-button" title="Next year" onClick={() => setSelectedYear((year) => year + 1)}>
+            <ChevronRight size={17} />
+          </button>
+        </div>
+
+        {monthAction?.type === 'create' && (
+          <div className="month-action-panel">
+            <div>
+              <strong>Create {monthLabel({ year: monthAction.year, month: monthAction.monthNumber })}</strong>
+              <p>Choose how to initialize the planned budget for this month.</p>
+            </div>
+            <div className="month-action-buttons">
+              <button className="primary" onClick={() => confirmCreateMonth(true)}>
+                Copy all planned values
+              </button>
+              <button onClick={() => confirmCreateMonth(false)}>Recurring only</button>
+              <button className="quiet" onClick={() => onMonthActionChange(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {monthAction?.type === 'delete' && (
+          <div className="month-action-panel danger-panel">
+            <div>
+              <strong>Delete {monthLabel(monthAction.targetMonth)}</strong>
+              <p>This removes that month's budget lines, expenses, and income entries.</p>
+            </div>
+            <div className="month-action-buttons">
+              <button className="danger-button" onClick={confirmDeleteMonth}>Delete month</button>
+              <button className="quiet" onClick={() => onMonthActionChange(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        <div className="year-stack">
+            <section className="year-section">
+              <h3>{selectedYear}</h3>
+              <div className="month-grid" role="list">
+                {monthShortNames.map((name, index) => {
+                  const monthNumber = index + 1;
+                  const item = byYearMonth.get(`${selectedYear}-${monthNumber}`);
+                  const isSelected = item?.id === month?.id;
+                  const savings = item ? item.savings : 0;
+                  return (
+                    <button
+                      key={`${selectedYear}-${monthNumber}`}
+                      className={item ? `month-card ${isSelected ? 'selected' : ''}` : 'month-card empty'}
+                      onClick={() => (item ? onOpenMonth(item) : requestCreateMonth(selectedYear, monthNumber))}
+                      role="listitem"
+                    >
+                      <span className="month-card-head">
+                        <strong>{name}</strong>
+                        {item ? <span>{item.status}</span> : <span>Create</span>}
+                      </span>
+                      {item ? (
+                        <>
+                          <span className="month-metric">
+                            <span>In</span>
+                            <strong className="num">{money(item.income_actual, currency)}</strong>
+                          </span>
+                          <span className="month-metric">
+                            <span>Out</span>
+                            <strong className="num">{money(item.expense_actual, currency)}</strong>
+                          </span>
+                          <span className={`month-metric ${savings >= 0 ? 'positive' : 'negative'}`}>
+                            <span>Save</span>
+                            <strong className="num">{money(savings, currency)}</strong>
+                          </span>
+                          <span className="month-foot">
+                            {item.expense_count + item.income_count} entries
+                            <span
+                              className="month-delete"
+                              title="Delete month"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                requestDeleteMonth(item);
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="month-empty-text">No record</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function BudgetPage({ month, currency }) {
   const [refresh, setRefresh] = useState(0);
   const [type, setType] = useState('expense');
@@ -295,13 +489,14 @@ function BudgetPage({ month, currency }) {
   const [newCategory, setNewCategory] = useState('');
 
   const state = useLoad(async () => {
+    if (!month) return null;
     const [budget, expenseCategories, incomeCategories] = await Promise.all([
       api(`/budget/${month.id}`),
       api('/categories/expense'),
       api('/categories/income')
     ]);
     return { budget, expenseCategories, incomeCategories };
-  }, [month.id, refresh]);
+  }, [month?.id, refresh]);
 
   async function saveLine(line, patch) {
     await api(`/budget-lines/${line.id}`, {
@@ -327,6 +522,7 @@ function BudgetPage({ month, currency }) {
     setRefresh((value) => value + 1);
   }
 
+  if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading budget...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
 
@@ -470,6 +666,7 @@ function TransactionsPage({ month, currency }) {
   }, [kind]);
 
   const state = useLoad(async () => {
+    if (!month) return null;
     const query = new URLSearchParams({ monthId: month.id, ...sort });
     if (filter) query.set('categoryId', filter);
     const [expenseCategories, incomeCategories, rows] = await Promise.all([
@@ -478,8 +675,9 @@ function TransactionsPage({ month, currency }) {
       api(`/transactions/${isExpense ? 'expenses' : 'income'}?${query}`)
     ]);
     return { expenseCategories, incomeCategories, rows };
-  }, [month.id, refresh, kind, filter, sort.sortBy, sort.sortDir]);
+  }, [month?.id, refresh, kind, filter, sort.sortBy, sort.sortDir]);
 
+  if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading transactions...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
 

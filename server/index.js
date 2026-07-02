@@ -11,6 +11,10 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
+app.get('/', (req, res) => {
+  res.redirect('http://localhost:5173');
+});
+
 app.get('/health', (req, res) => {
   res.json({ ok: true });
 });

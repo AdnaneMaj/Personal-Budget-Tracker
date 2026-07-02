@@ -34,6 +34,40 @@ export async function listMonths() {
   return rows;
 }
 
+export async function listMonthSummaries() {
+  const { rows } = await query(
+    `SELECT m.id,
+            m.year,
+            m.month,
+            m.status,
+            COALESCE(income.amount, 0) AS income_actual,
+            COALESCE(expenses.amount, 0) AS expense_actual,
+            COALESCE(income.amount, 0) - COALESCE(expenses.amount, 0) AS savings,
+            COALESCE(expenses.count, 0) AS expense_count,
+            COALESCE(income.count, 0) AS income_count
+     FROM months m
+     LEFT JOIN (
+       SELECT month_id, SUM(amount) AS amount, COUNT(*) AS count
+       FROM income_entries
+       GROUP BY month_id
+     ) income ON income.month_id = m.id
+     LEFT JOIN (
+       SELECT month_id, SUM(price) AS amount, COUNT(*) AS count
+       FROM expense_transactions
+       GROUP BY month_id
+     ) expenses ON expenses.month_id = m.id
+     ORDER BY m.year DESC, m.month DESC`
+  );
+  return rows.map((row) => ({
+    ...row,
+    income_actual: Number(row.income_actual),
+    expense_actual: Number(row.expense_actual),
+    savings: Number(row.savings),
+    expense_count: Number(row.expense_count),
+    income_count: Number(row.income_count)
+  }));
+}
+
 export async function findMonthByYearMonth(year, month) {
   const { rows } = await query(
     `SELECT id, year, month, status
@@ -98,9 +132,13 @@ export async function createMonth({ year, month, status = 'open', copyFromPrevio
   }
 }
 
-export async function getOrCreateCurrentMonth() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return createMonth({ year, month, copyFromPrevious: true });
+export async function deleteMonth(id) {
+  const { rows } = await query(
+    `DELETE FROM months
+     WHERE id = $1
+     RETURNING id, year, month, status`,
+    [id]
+  );
+  if (!rows[0]) throw new HttpError(404, 'month not found');
+  return rows[0];
 }

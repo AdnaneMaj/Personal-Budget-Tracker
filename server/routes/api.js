@@ -15,8 +15,9 @@ apiRouter.get('/config', (req, res) => {
 });
 
 apiRouter.get('/months', asyncHandler(monthController.listMonths));
-apiRouter.get('/months/current', asyncHandler(monthController.currentMonth));
+apiRouter.get('/months/summary', asyncHandler(monthController.listMonthSummaries));
 apiRouter.post('/months', asyncHandler(monthController.createMonth));
+apiRouter.delete('/months/:id', asyncHandler(monthController.deleteMonth));
 
 apiRouter.get('/categories/:type', asyncHandler(categoryController.listCategories));
 apiRouter.post('/categories/:type', asyncHandler(categoryController.createCategory));

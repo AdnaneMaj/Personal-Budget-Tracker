@@ -5,8 +5,8 @@ export async function listMonths(req, res) {
   res.json(await monthService.listMonths());
 }
 
-export async function currentMonth(req, res) {
-  res.json(await monthService.getOrCreateCurrentMonth());
+export async function listMonthSummaries(req, res) {
+  res.json(await monthService.listMonthSummaries());
 }
 
 export async function createMonth(req, res) {
@@ -21,4 +21,8 @@ export async function createMonth(req, res) {
 
 export function parseMonthId(req) {
   return requireInteger(req.params.monthId, 'monthId');
+}
+
+export async function deleteMonth(req, res) {
+  res.json(await monthService.deleteMonth(requireInteger(req.params.id, 'id')));
 }
