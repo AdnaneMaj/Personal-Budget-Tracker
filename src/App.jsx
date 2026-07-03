@@ -41,6 +41,54 @@ const tabs = [
 const axisTick = { fontFamily: 'IBM Plex Mono', fontSize: 12, fill: '#6b6559' };
 const tooltipStyle = { fontFamily: 'IBM Plex Mono', border: '1px solid #c9bfa8', borderRadius: 3 };
 const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const categoryEmojiOptions = [
+  '🍽️',
+  '🏠',
+  '🚌',
+  '🛒',
+  '💼',
+  '💰',
+  '🎁',
+  '📶',
+  '🚗',
+  '🩺',
+  '👕',
+  '🎬',
+  '👪',
+  '✦'
+];
+const categoryEmojiFallbacks = {
+  food: '🍽️',
+  utensils: '🍽️',
+  clothes: '👕',
+  shirt: '👕',
+  rent: '🏠',
+  home: '🏠',
+  wifi: '📶',
+  transport: '🚌',
+  bus: '🚌',
+  health: '🩺',
+  'heart-pulse': '🩺',
+  family: '👪',
+  users: '👪',
+  entertainment: '🎬',
+  film: '🎬',
+  car: '🚗',
+  divers: '✦',
+  'more-horizontal': '✦',
+  paycheck: '💼',
+  briefcase: '💼',
+  bonus: '🎁',
+  sparkles: '🎁',
+  other: '💰',
+  wallet: '💰'
+};
+
+function categoryEmoji(categoryOrName, icon) {
+  const category = typeof categoryOrName === 'object' ? categoryOrName : { name: categoryOrName, icon };
+  if (category.icon && !/^[a-z0-9-]+$/i.test(category.icon)) return category.icon;
+  return categoryEmojiFallbacks[category.icon] || categoryEmojiFallbacks[category.name] || '✦';
+}
 
 function nextMonthValue(month, offset) {
   const date = new Date(month.year, month.month - 1 + offset, 1);
@@ -204,6 +252,7 @@ function OverviewPage({ month, currency }) {
   if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading overview...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
+  if (!state.data) return <Panel>Loading overview...</Panel>;
 
   const data = state.data;
   const net = data.totals.actual_income - data.totals.actual_expenses;
@@ -486,7 +535,14 @@ function BudgetPage({ month, currency }) {
   const [refresh, setRefresh] = useState(0);
   const [type, setType] = useState('expense');
   const [showCategories, setShowCategories] = useState(false);
-  const [newCategory, setNewCategory] = useState('');
+  const [newCategory, setNewCategory] = useState({ name: '', icon: categoryEmojiFallbacks.food });
+
+  useEffect(() => {
+    setNewCategory({
+      name: '',
+      icon: type === 'expense' ? categoryEmojiFallbacks.food : categoryEmojiFallbacks.paycheck
+    });
+  }, [type]);
 
   const state = useLoad(async () => {
     if (!month) return null;
@@ -507,13 +563,13 @@ function BudgetPage({ month, currency }) {
   }
 
   async function addCategory() {
-    const name = newCategory.trim();
+    const name = newCategory.name.trim();
     if (!name) return;
     await api(`/categories/${type}`, {
       method: 'POST',
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name, icon: newCategory.icon })
     });
-    setNewCategory('');
+    setNewCategory((current) => ({ ...current, name: '' }));
     setRefresh((value) => value + 1);
   }
 
@@ -525,6 +581,7 @@ function BudgetPage({ month, currency }) {
   if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading budget...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
+  if (!state.data) return <Panel>Loading budget...</Panel>;
 
   const lines = type === 'expense' ? state.data.budget.expenses : state.data.budget.income;
   const categories = type === 'expense' ? state.data.expenseCategories : state.data.incomeCategories;
@@ -560,10 +617,22 @@ function BudgetPage({ month, currency }) {
       {showCategories && (
         <div className="drawer">
           <div className="inline-form">
+            <select
+              className="emoji-select"
+              value={newCategory.icon}
+              aria-label="Category emoji"
+              onChange={(event) => setNewCategory((current) => ({ ...current, icon: event.target.value }))}
+            >
+              {categoryEmojiOptions.map((emoji) => (
+                <option key={emoji} value={emoji}>
+                  {emoji}
+                </option>
+              ))}
+            </select>
             <input
-              value={newCategory}
+              value={newCategory.name}
               placeholder={`New ${type} category`}
-              onChange={(event) => setNewCategory(event.target.value)}
+              onChange={(event) => setNewCategory((current) => ({ ...current, name: event.target.value }))}
               onKeyDown={(event) => event.key === 'Enter' && addCategory()}
             />
             <button className="icon-button primary" title="Add category" onClick={addCategory}>
@@ -573,7 +642,7 @@ function BudgetPage({ month, currency }) {
           <div className="category-list">
             {categories.map((category) => (
               <div key={category.id} className={!category.is_active ? 'inactive category-row' : 'category-row'}>
-                <span className="swatch" style={{ backgroundColor: category.color || '#8a8375' }} />
+                <span className="category-emoji" aria-hidden="true">{categoryEmoji(category)}</span>
                 <span>{category.name}</span>
                 {category.is_active && (
                   <button className="row-delete" title="Deactivate category" onClick={() => deactivateCategory(category.id)}>
@@ -609,7 +678,7 @@ function BudgetTable({ type, lines, currency, onSave }) {
             return (
               <tr key={line.id} className={over ? 'over-budget' : ''}>
                 <td>
-                  <span className="swatch" style={{ backgroundColor: line.color || '#8a8375' }} />
+                  <span className="category-emoji" aria-hidden="true">{categoryEmoji(line.category_name, line.icon)}</span>
                   {line.category_name}
                   {!line.is_active && <span className="muted"> inactive</span>}
                 </td>
@@ -680,6 +749,7 @@ function TransactionsPage({ month, currency }) {
   if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading transactions...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
+  if (!state.data) return <Panel>Loading transactions...</Panel>;
 
   const categories = (isExpense ? state.data.expenseCategories : state.data.incomeCategories).filter(
     (category) => category.is_active
@@ -923,12 +993,63 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
 
 function SavingsPage({ currency }) {
   const state = useLoad(() => api('/savings'), []);
+  const [expectedMonthlyValue, setExpectedMonthlyValue] = useState(() => (
+    localStorage.getItem('budget:expectedMonthlySavings') || ''
+  ));
+  const [forecastStartKey, setForecastStartKey] = useState(() => (
+    localStorage.getItem('budget:forecastStartMonth') || 'latest'
+  ));
+
+  useEffect(() => {
+    localStorage.setItem('budget:expectedMonthlySavings', expectedMonthlyValue);
+  }, [expectedMonthlyValue]);
+
+  useEffect(() => {
+    localStorage.setItem('budget:forecastStartMonth', forecastStartKey);
+  }, [forecastStartKey]);
 
   if (state.loading) return <Panel>Loading savings...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
 
-  const chartData = state.data.map((row) => ({ ...row, label: `${row.month}/${row.year}` }));
-  const total = chartData.length ? chartData[chartData.length - 1].running_total : 0;
+  const expectedMonthly = Number(expectedMonthlyValue || 0);
+  const hasForecast = expectedMonthlyValue !== '' && Number.isFinite(expectedMonthly);
+  const actualChartData = state.data.map((row) => ({ ...row, label: `${row.month}/${row.year}` }));
+  const total = actualChartData.length ? actualChartData[actualChartData.length - 1].running_total : 0;
+  const selectedForecastStartIndex = forecastStartKey === 'latest'
+    ? actualChartData.length - 1
+    : actualChartData.findIndex((row) => String(row.month_id) === forecastStartKey);
+  const forecastStartIndex = selectedForecastStartIndex >= 0 ? selectedForecastStartIndex : actualChartData.length - 1;
+  const forecastStart = actualChartData[forecastStartIndex] || {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    running_total: 0
+  };
+  const forecastBase = Number(forecastStart.running_total || 0);
+  const chartRowsByMonth = new Map();
+  for (const row of actualChartData) {
+    chartRowsByMonth.set(`${row.year}-${row.month}`, { ...row, expected_running_total: null });
+  }
+  if (hasForecast) {
+    for (let index = 0; index <= 12; index += 1) {
+      const date = new Date(forecastStart.year, forecastStart.month - 1 + index, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const key = `${year}-${month}`;
+      const existing = chartRowsByMonth.get(key) || {
+        year,
+        month,
+        label: `${month}/${year}`,
+        running_total: null
+      };
+      chartRowsByMonth.set(key, {
+        ...existing,
+        expected_running_total: forecastBase + expectedMonthly * index,
+        is_forecast: index > 0
+      });
+    }
+  }
+  const chartData = Array.from(chartRowsByMonth.values())
+    .sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
 
   return (
     <div className="grid">
@@ -940,23 +1061,64 @@ function SavingsPage({ currency }) {
       <section className="panel chart-panel">
         <div className="section-head">
           <h2>Savings growth</h2>
+          <label className="forecast-control">
+            <span>Expected / month</span>
+            <input
+              type="number"
+              step="0.01"
+              value={expectedMonthlyValue}
+              placeholder="0.00"
+              onChange={(event) => setExpectedMonthlyValue(event.target.value)}
+            />
+          </label>
+          <label className="forecast-control">
+            <span>Start from</span>
+            <select value={forecastStartKey} onChange={(event) => setForecastStartKey(event.target.value)}>
+              <option value="latest">Latest actual</option>
+              {actualChartData.map((row) => (
+                <option key={row.month_id} value={row.month_id}>
+                  {monthLabel(row)}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={chartData}>
             <CartesianGrid stroke="#ded6c4" vertical={false} />
             <XAxis dataKey="label" stroke="#6b6559" tick={axisTick} />
             <YAxis stroke="#6b6559" tick={axisTick} />
-            <Tooltip formatter={(value) => money(value, currency)} contentStyle={tooltipStyle} />
-            <Line type="monotone" dataKey="running_total" stroke="#274b52" strokeWidth={2.5} dot={{ r: 3 }} />
+            <Tooltip formatter={(value) => (value == null ? '' : money(value, currency))} contentStyle={tooltipStyle} />
+            <Line
+              name="Actual"
+              type="monotone"
+              dataKey="running_total"
+              stroke="#274b52"
+              strokeWidth={2.5}
+              dot={{ r: 3 }}
+            />
+            <Line
+              name="Expected"
+              type="monotone"
+              dataKey="expected_running_total"
+              stroke="#b0813f"
+              strokeWidth={2.5}
+              strokeDasharray="6 5"
+              dot={false}
+            />
           </LineChart>
         </ResponsiveContainer>
+        <div className="chart-legend">
+          <span><i className="legend-line actual" />Actual</span>
+          <span><i className="legend-line expected" />Expected 12-month forecast</span>
+        </div>
       </section>
 
       <section className="panel">
         <div className="section-head">
           <h2>Monthly savings</h2>
         </div>
-        {chartData.length === 0 ? (
+        {actualChartData.length === 0 ? (
           <p className="empty-state">No months tracked yet.</p>
         ) : (
           <div className="table-wrap">

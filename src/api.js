@@ -19,11 +19,11 @@ export async function api(path, options = {}) {
 }
 
 export function money(value, currency = 'MAD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
+  const amount = new Intl.NumberFormat('fr-MA', {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(Number(value || 0));
+  return `${amount} ${currency}`;
 }
 
 export function monthLabel(month) {

@@ -476,12 +476,18 @@ tr.editing {
   background: var(--accent-soft);
 }
 
-.swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.category-emoji {
+  width: 24px;
+  height: 24px;
   margin-right: 8px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: 14px;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 /* row actions reveal on hover to keep the table quiet at rest */
@@ -594,6 +600,14 @@ tr.editing .row-delete,
   flex: 1;
 }
 
+.emoji-select {
+  width: 54px;
+  min-width: 54px;
+  padding: 0 6px;
+  text-align: center;
+  font-size: 16px;
+}
+
 /* ---------- add-transaction form ---------- */
 
 .add-form {
@@ -608,6 +622,54 @@ tr.editing .row-delete,
 .add-form input:nth-child(2) {
   flex: 1;
   min-width: 140px;
+}
+
+.forecast-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.forecast-control span {
+  white-space: nowrap;
+}
+
+.forecast-control input,
+.forecast-control select {
+  width: 120px;
+  font-family: var(--font-mono);
+}
+
+.forecast-control select {
+  width: 150px;
+}
+
+.chart-legend {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 22px;
+  height: 0;
+  border-top: 2px solid var(--accent);
+}
+
+.legend-line.expected {
+  border-top-color: var(--gold);
+  border-top-style: dashed;
 }
 
 @keyframes unfold {
