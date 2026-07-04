@@ -328,7 +328,7 @@ h2 {
 
 .hero {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   padding: 24px 28px;
   border-width: 2px;
 }
@@ -350,9 +350,15 @@ h2 {
 
 .hero-number {
   font-family: var(--font-display);
-  font-size: 44px;
+  font-size: 48px;
   font-weight: 600;
   line-height: 1;
+}
+
+.hero-number span {
+  color: var(--ink);
+  font-size: 0.46em;
+  font-weight: 500;
 }
 
 .hero.positive .hero-number {
@@ -367,6 +373,81 @@ h2 {
   display: grid;
   gap: 8px;
   max-width: 420px;
+}
+
+.budget-hero .hero-compare {
+  max-width: none;
+}
+
+.budget-pace,
+.pace-note {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.pace-note {
+  font-size: 13px;
+}
+
+.budget-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 24px;
+}
+
+.safe-spend {
+  min-width: 230px;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  text-align: right;
+}
+
+.safe-spend span {
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.safe-spend strong {
+  color: var(--in);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hero.negative .safe-spend strong {
+  color: var(--out);
+}
+
+.safe-spend small {
+  margin-left: 4px;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.safe-spend em {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.budget-hero-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.budget-hero-footer svg {
+  flex: 0 0 auto;
+  color: currentColor;
 }
 
 .compare-row {
@@ -399,6 +480,37 @@ h2 {
 
 .progress span.over {
   background: var(--out);
+}
+
+.pace-track {
+  position: relative;
+  height: 10px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: visible;
+}
+
+.pace-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--in);
+  transition: width 0.3s ease;
+}
+
+.hero.negative .pace-fill {
+  background: var(--out);
+}
+
+.pace-marker {
+  position: absolute;
+  top: -9px;
+  bottom: -9px;
+  width: 0;
+  border-left: 2px dashed var(--accent);
+  transform: translateX(-1px);
+  opacity: 0.95;
 }
 
 /* ---------- tables ---------- */
@@ -661,6 +773,41 @@ tr.editing .row-delete,
   gap: 6px;
 }
 
+.chart-tooltip {
+  min-width: 190px;
+  padding: 10px 12px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgb(35 32 26 / 0.12);
+  font-size: 12px;
+}
+
+.chart-tooltip strong {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 3px 0;
+}
+
+.tooltip-row span:last-child {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.tooltip-breakdown {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
 .legend-line {
   width: 22px;
   height: 0;
@@ -669,7 +816,6 @@ tr.editing .row-delete,
 
 .legend-line.expected {
   border-top-color: var(--gold);
-  border-top-style: dashed;
 }
 
 @keyframes unfold {
@@ -898,6 +1044,17 @@ tr.editing .row-delete,
 
   .head-actions {
     flex-wrap: wrap;
+  }
+
+  .budget-hero-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .safe-spend {
+    min-width: 0;
+    justify-items: start;
+    text-align: left;
   }
 
   .month-action-panel {

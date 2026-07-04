@@ -29,24 +29,66 @@ export async function getDashboard(monthId) {
   );
 
   const trend = await query(
-    `SELECT m.id AS month_id,
-            m.year,
-            m.month,
-            COALESCE(expenses.amount, 0) AS expenses,
-            COALESCE(income.amount, 0) AS income
-     FROM months m
-     LEFT JOIN (
-       SELECT month_id, SUM(price) AS amount
+    `WITH selected_month AS (
+       SELECT year, month
+       FROM months
+       WHERE id = $1
+     ),
+     days AS (
+       SELECT generate_series(
+         make_date((SELECT year FROM selected_month), (SELECT month FROM selected_month), 1),
+         CASE
+           WHEN (SELECT year FROM selected_month) = EXTRACT(YEAR FROM CURRENT_DATE)::int
+            AND (SELECT month FROM selected_month) = EXTRACT(MONTH FROM CURRENT_DATE)::int
+           THEN CURRENT_DATE
+           ELSE (make_date((SELECT year FROM selected_month), (SELECT month FROM selected_month), 1) + interval '1 month - 1 day')::date
+         END,
+         interval '1 day'
+       )::date AS day
+     ),
+     expense_days AS (
+       SELECT transaction_date AS day, SUM(price) AS amount
        FROM expense_transactions
-       GROUP BY month_id
-     ) expenses ON expenses.month_id = m.id
-     LEFT JOIN (
-       SELECT month_id, SUM(amount) AS amount
+       WHERE month_id = $1
+       GROUP BY transaction_date
+     ),
+     category_days AS (
+       SELECT t.transaction_date AS day,
+              json_agg(
+                json_build_object(
+                  'category_name', c.name,
+                  'amount', t.amount
+                )
+                ORDER BY t.amount DESC
+              ) AS categories
+       FROM (
+         SELECT transaction_date, category_id, SUM(price) AS amount
+         FROM expense_transactions
+         WHERE month_id = $1
+         GROUP BY transaction_date, category_id
+       ) t
+       JOIN expense_categories c ON c.id = t.category_id
+       WHERE t.amount > 0
+       GROUP BY t.transaction_date
+     ),
+     income_days AS (
+       SELECT entry_date AS day, SUM(amount) AS amount
        FROM income_entries
-       GROUP BY month_id
-     ) income ON income.month_id = m.id
-     ORDER BY m.year DESC, m.month DESC
-     LIMIT 12`
+       WHERE month_id = $1
+       GROUP BY entry_date
+     )
+     SELECT EXTRACT(DAY FROM days.day)::int AS day,
+            days.day AS date,
+            COALESCE(expense_days.amount, 0) AS daily_expenses,
+            SUM(COALESCE(expense_days.amount, 0)) OVER (ORDER BY days.day) AS expenses,
+            COALESCE(category_days.categories, '[]'::json) AS expense_categories,
+            COALESCE(income_days.amount, 0) AS income
+     FROM days
+     LEFT JOIN expense_days ON expense_days.day = days.day
+     LEFT JOIN category_days ON category_days.day = days.day
+     LEFT JOIN income_days ON income_days.day = days.day
+     ORDER BY days.day`,
+    [monthId]
   );
 
   const savings = await query(
@@ -144,7 +186,13 @@ export async function getDashboard(monthId) {
   return {
     totals: numberFields(totals.rows[0] || {}, ['planned_expenses', 'actual_expenses', 'actual_income']),
     spendingByCategory: spendingByCategory.rows.map((row) => numberFields(row, ['amount'])),
-    trend: trend.rows.reverse().map((row) => numberFields(row, ['expenses', 'income'])),
+    trend: trend.rows.map((row) => ({
+      ...numberFields(row, ['day', 'daily_expenses', 'expenses', 'income']),
+      expense_categories: (row.expense_categories || []).map((category) => ({
+        ...category,
+        amount: Number(category.amount || 0)
+      }))
+    })),
     savings: savings.rows.map((row) => numberFields(row, ['amount_saved', 'running_total'])),
     overBudget: overBudget.rows.map((row) => numberFields(row, ['planned_amount', 'actual_amount', 'over_amount'])),
     mom: mom.rows.map((row) => numberFields(row, ['current_amount', 'previous_amount', 'percent_change']))

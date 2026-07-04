@@ -24,6 +24,8 @@ import {
   LayoutDashboard,
   Plus,
   Save,
+  TrendingDown,
+  TrendingUp,
   Trash2,
   WalletCards
 } from 'lucide-react';
@@ -88,6 +90,35 @@ function categoryEmoji(categoryOrName, icon) {
   const category = typeof categoryOrName === 'object' ? categoryOrName : { name: categoryOrName, icon };
   if (category.icon && !/^[a-z0-9-]+$/i.test(category.icon)) return category.icon;
   return categoryEmojiFallbacks[category.icon] || categoryEmojiFallbacks[category.name] || '✦';
+}
+
+function DailyExpenseTooltip({ active, payload, label, currency }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const categories = (row.expense_categories || []).filter((category) => Number(category.amount) > 0);
+  return (
+    <div className="chart-tooltip">
+      <strong>Day {label}</strong>
+      <div className="tooltip-row">
+        <span>Accumulated</span>
+        <span>{money(row.expenses, currency)}</span>
+      </div>
+      <div className="tooltip-row">
+        <span>This day</span>
+        <span>{money(row.daily_expenses, currency)}</span>
+      </div>
+      {categories.length > 0 && (
+        <div className="tooltip-breakdown">
+          {categories.map((category) => (
+            <div key={category.category_name} className="tooltip-row">
+              <span>{categoryEmoji(category.category_name)} {category.category_name}</span>
+              <span>{money(category.amount, currency)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function nextMonthValue(month, offset) {
@@ -255,50 +286,74 @@ function OverviewPage({ month, currency }) {
   if (!state.data) return <Panel>Loading overview...</Panel>;
 
   const data = state.data;
-  const net = data.totals.actual_income - data.totals.actual_expenses;
   const expensePct = data.totals.planned_expenses > 0
     ? (data.totals.actual_expenses / data.totals.planned_expenses) * 100
     : 0;
-  const trend = data.trend.map((row) => ({ ...row, label: `${row.month}/${row.year}` }));
+  const remainingBudget = data.totals.planned_expenses - data.totals.actual_expenses;
+  const trend = data.trend.map((row) => ({ ...row, label: String(row.day) }));
+  const today = new Date();
+  const daysInMonth = new Date(month.year, month.month, 0).getDate();
+  const isCurrentMonth = month.year === today.getFullYear() && month.month === today.getMonth() + 1;
+  const elapsedDays = isCurrentMonth ? today.getDate() : Math.max(trend.length, 1);
+  const monthElapsedPct = (elapsedDays / daysInMonth) * 100;
+  const daysLeftIncludingToday = Math.max(daysInMonth - elapsedDays + 1, 1);
+  const safePerDay = Math.max(remainingBudget, 0) / daysLeftIncludingToday;
+  const projectedSpend = elapsedDays > 0 ? (data.totals.actual_expenses / elapsedDays) * daysInMonth : 0;
+  const projectedDelta = data.totals.planned_expenses - projectedSpend;
+  const TrendIcon = projectedDelta >= 0 ? TrendingDown : TrendingUp;
+  const paceStatus = expensePct <= monthElapsedPct ? 'positive' : 'negative';
+  const spentDisplay = money(data.totals.actual_expenses, currency).replace(` ${currency}`, '');
+  const progressPct = Math.min(Math.max(expensePct, 0), 100);
+  const paceMarkerPct = Math.min(Math.max(monthElapsedPct, 0), 100);
 
   return (
     <div className="grid overview-grid">
-      <section className={`panel hero ${net >= 0 ? 'positive' : 'negative'}`}>
-        <span className="hero-label">Net this month</span>
-        <strong className="hero-number num">
-          {net >= 0 ? '+' : ''}
-          {money(net, currency)}
-        </strong>
+      <section className={`panel hero budget-hero ${paceStatus}`}>
+        <div className="budget-hero-top">
+          <div>
+            <span className="hero-label">Budget used</span>
+            <strong className="hero-number num">
+              {spentDisplay}
+              <span> / {money(data.totals.planned_expenses, currency)}</span>
+            </strong>
+          </div>
+          <div className="safe-spend">
+            <span>Safe to spend today</span>
+            <strong className="num">
+              {money(safePerDay, currency)}
+              <small>/day</small>
+            </strong>
+            <em>to stay on budget</em>
+          </div>
+        </div>
         <div className="hero-compare">
-          <div className="compare-row">
-            <span>Income</span>
-            <span className="num">{money(data.totals.actual_income, currency)}</span>
+          <p className="budget-pace">
+            {Math.round(expensePct)}% of budget &middot; day {elapsedDays} of {daysInMonth} ({Math.round(monthElapsedPct)}% of month gone)
+          </p>
+          <div className="pace-track" aria-label="Budget usage compared with month progress">
+            <span className="pace-fill" style={{ width: `${progressPct}%` }} />
+            <i className="pace-marker" style={{ left: `${paceMarkerPct}%` }} />
           </div>
-          <div className="compare-row">
-            <span>Expenses</span>
-            <span className="num">
-              {money(data.totals.actual_expenses, currency)}
-              <span className="muted"> of {money(data.totals.planned_expenses, currency)} planned</span>
+          <div className="budget-hero-footer">
+            <TrendIcon size={18} />
+            <span>
+              Projected month-end spending: {money(projectedSpend, currency)}. Expected to finish {money(Math.abs(projectedDelta), currency)} {projectedDelta >= 0 ? 'under' : 'over'} budget.
             </span>
-          </div>
-          <div className="progress wide">
-            <span className={expensePct > 100 ? 'over' : ''} style={{ width: `${Math.min(expensePct, 100)}%` }} />
           </div>
         </div>
       </section>
 
       <section className="panel chart-panel">
         <div className="section-head">
-          <h2>Income vs expenses</h2>
+          <h2>Daily expenses</h2>
         </div>
         <ResponsiveContainer width="100%" height={230}>
           <LineChart data={trend}>
             <CartesianGrid stroke="#ded6c4" vertical={false} />
             <XAxis dataKey="label" stroke="#6b6559" tick={axisTick} />
             <YAxis stroke="#6b6559" tick={axisTick} />
-            <Tooltip formatter={(value) => money(value, currency)} contentStyle={tooltipStyle} />
-            <Line type="monotone" dataKey="income" stroke="#3c6e5c" strokeWidth={2.5} dot={{ r: 3 }} />
-            <Line type="monotone" dataKey="expenses" stroke="#a8452f" strokeWidth={2.5} dot={{ r: 3 }} />
+            <Tooltip content={<DailyExpenseTooltip currency={currency} />} />
+            <Line type="monotone" dataKey="expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </section>
@@ -1103,7 +1158,6 @@ function SavingsPage({ currency }) {
               dataKey="expected_running_total"
               stroke="#b0813f"
               strokeWidth={2.5}
-              strokeDasharray="6 5"
               dot={false}
             />
           </LineChart>
