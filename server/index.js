@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { apiRouter } from './routes/api.js';
 import { HttpError } from './utils/http.js';
 import { startZakatPriceScheduler } from './services/zakatService.js';
+import { startTelegramBot } from './services/telegramBotService.js';
 
 const app = express();
 
@@ -39,4 +40,5 @@ app.use((error, req, res, next) => {
 app.listen(config.port, () => {
   console.log(`Budget API listening on http://localhost:${config.port}`);
   startZakatPriceScheduler();
+  startTelegramBot();
 });
