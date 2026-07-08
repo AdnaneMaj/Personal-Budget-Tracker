@@ -1,9 +1,11 @@
-import { query } from '../db/pool.js';
+import { pool, query } from '../db/pool.js';
 import { HttpError } from '../utils/http.js';
 
 const expenseSort = {
   date: 't.transaction_date',
   description: 't.description',
+  quantity: 't.quantity',
+  unit_price: 't.unit_price',
   price: 't.price',
   category: 'c.name'
 };
@@ -27,6 +29,48 @@ function amountValue(value, fieldName) {
   return amount;
 }
 
+function quantityValue(value) {
+  if (value === undefined || value === null || value === '') return 1;
+  const quantity = Number(value);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new HttpError(400, 'quantity must be greater than zero');
+  }
+  return quantity;
+}
+
+function expenseRow(row) {
+  return {
+    ...row,
+    quantity: Number(row.quantity),
+    unit_price: row.unit_price === null ? null : Number(row.unit_price),
+    price: Number(row.price)
+  };
+}
+
+function expenseFields(payload) {
+  if (!payload.month_id || !payload.transaction_date || !payload.description || !payload.category_id) {
+    throw new HttpError(400, 'month_id, transaction_date, description, category_id, and price are required');
+  }
+  const quantity = quantityValue(payload.quantity);
+  const hasPrice = payload.price !== undefined && payload.price !== null && payload.price !== '';
+  const hasUnitPrice = payload.unit_price !== undefined && payload.unit_price !== null && payload.unit_price !== '';
+  const price = hasPrice ? amountValue(payload.price, 'price') : amountValue(Number(payload.unit_price) * quantity, 'price');
+  const unitPrice = hasUnitPrice ? amountValue(payload.unit_price, 'unit_price') : (quantity > 0 ? price / quantity : price);
+  return [
+    payload.month_id,
+    payload.transaction_date,
+    String(payload.description).trim(),
+    quantity,
+    unitPrice,
+    price,
+    payload.category_id
+  ];
+}
+
+const insertExpenseSql = `INSERT INTO expense_transactions (month_id, transaction_date, description, quantity, unit_price, price, category_id)
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
+  RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id`;
+
 export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'date', sortDir = 'desc' }) {
   const params = [monthId];
   let where = 'WHERE t.month_id = $1';
@@ -41,6 +85,8 @@ export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'd
             t.month_id,
             t.transaction_date AS date,
             t.description,
+            t.quantity,
+            t.unit_price,
             t.price,
             t.category_id,
             c.name AS category_name
@@ -50,44 +96,70 @@ export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'd
      ORDER BY ${orderColumn} ${sortDirection(sortDir)}, t.id DESC`,
     params
   );
-  return rows.map((row) => ({ ...row, price: Number(row.price) }));
+  return rows.map(expenseRow);
 }
 
 export async function createExpenseTransaction(payload) {
-  if (!payload.month_id || !payload.transaction_date || !payload.description || !payload.category_id) {
-    throw new HttpError(400, 'month_id, transaction_date, description, category_id, and price are required');
-  }
-  const price = amountValue(payload.price, 'price');
   const { rows } = await query(
-    `INSERT INTO expense_transactions (month_id, transaction_date, description, price, category_id)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, month_id, transaction_date AS date, description, price, category_id`,
-    [payload.month_id, payload.transaction_date, String(payload.description).trim(), price, payload.category_id]
+    insertExpenseSql,
+    expenseFields(payload)
   );
-  return { ...rows[0], price: Number(rows[0].price) };
+  return expenseRow(rows[0]);
+}
+
+export async function createExpenseTransactions(payloads) {
+  if (!Array.isArray(payloads) || payloads.length === 0) {
+    throw new HttpError(400, 'transactions must be a non-empty array');
+  }
+  if (payloads.length > 50) {
+    throw new HttpError(400, 'cannot create more than 50 expense transactions at once');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const created = [];
+    for (const payload of payloads) {
+      const { rows } = await client.query(insertExpenseSql, expenseFields(payload));
+      created.push(expenseRow(rows[0]));
+    }
+    await client.query('COMMIT');
+    return created;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateExpenseTransaction(id, payload) {
+  const quantity = payload.quantity === undefined ? null : quantityValue(payload.quantity);
+  const unitPrice = payload.unit_price === undefined ? null : amountValue(payload.unit_price, 'unit_price');
   const price = payload.price === undefined ? null : amountValue(payload.price, 'price');
   const { rows } = await query(
     `UPDATE expense_transactions
      SET transaction_date = COALESCE($1, transaction_date),
          description = COALESCE($2, description),
-         price = COALESCE($3, price),
-         category_id = COALESCE($4, category_id),
+         quantity = COALESCE($3, quantity),
+         unit_price = COALESCE($4, unit_price),
+         price = COALESCE($5, price),
+         category_id = COALESCE($6, category_id),
          updated_at = now()
-     WHERE id = $5
-     RETURNING id, month_id, transaction_date AS date, description, price, category_id`,
+     WHERE id = $7
+     RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id`,
     [
       payload.transaction_date || null,
       payload.description ? String(payload.description).trim() : null,
+      quantity,
+      unitPrice,
       price,
       payload.category_id || null,
       id
     ]
   );
   if (!rows[0]) throw new HttpError(404, 'expense transaction not found');
-  return { ...rows[0], price: Number(rows[0].price) };
+  return expenseRow(rows[0]);
 }
 
 export async function deleteExpenseTransaction(id) {

@@ -29,7 +29,7 @@ import {
   Trash2,
   WalletCards
 } from 'lucide-react';
-import { api, money, monthLabel, todayISO } from './api.js';
+import { api, dateOnly, money, monthLabel, todayISO } from './api.js';
 import './styles.css';
 
 const tabs = [
@@ -37,12 +37,14 @@ const tabs = [
   { id: 'months', label: 'Months', icon: CalendarDays },
   { id: 'budget', label: 'Budget', icon: WalletCards },
   { id: 'transactions', label: 'Transactions', icon: Coins },
+  { id: 'receivables', label: 'Receivable', icon: WalletCards },
   { id: 'savings', label: 'Savings', icon: BarChart3 }
 ];
 
 const axisTick = { fontFamily: 'IBM Plex Mono', fontSize: 12, fill: '#6b6559' };
 const tooltipStyle = { fontFamily: 'IBM Plex Mono', border: '1px solid #c9bfa8', borderRadius: 3 };
 const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const RADIAN = Math.PI / 180;
 const categoryEmojiOptions = [
   '🍽️',
   '🏠',
@@ -95,19 +97,22 @@ function categoryEmoji(categoryOrName, icon) {
 function DailyExpenseTooltip({ active, payload, label, currency }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
+  const isForecast = row.isForecast;
   const categories = (row.expense_categories || []).filter((category) => Number(category.amount) > 0);
   return (
     <div className="chart-tooltip">
       <strong>Day {label}</strong>
       <div className="tooltip-row">
-        <span>Accumulated</span>
-        <span>{money(row.expenses, currency)}</span>
+        <span>{isForecast ? 'Projected total' : 'Accumulated'}</span>
+        <span>{money(isForecast ? row.forecast_expenses : row.expenses, currency)}</span>
       </div>
-      <div className="tooltip-row">
-        <span>This day</span>
-        <span>{money(row.daily_expenses, currency)}</span>
-      </div>
-      {categories.length > 0 && (
+      {!isForecast && (
+        <div className="tooltip-row">
+          <span>This day</span>
+          <span>{money(row.daily_expenses, currency)}</span>
+        </div>
+      )}
+      {!isForecast && categories.length > 0 && (
         <div className="tooltip-breakdown">
           {categories.map((category) => (
             <div key={category.category_name} className="tooltip-row">
@@ -118,6 +123,65 @@ function DailyExpenseTooltip({ active, payload, label, currency }) {
         </div>
       )}
     </div>
+  );
+}
+
+function CategoryBudgetTooltip({ active, payload, currency }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const planned = Number(row.planned_amount || 0);
+  const actual = Number(row.actual_amount || 0);
+  const remaining = Math.max(planned - actual, 0);
+  const consumptionPct = planned > 0 ? (actual / planned) * 100 : 0;
+
+  return (
+    <div className="chart-tooltip">
+      <strong>{row.category_name}</strong>
+      <div className="tooltip-row">
+        <span>Budget</span>
+        <span>{money(planned, currency)}</span>
+      </div>
+      <div className="tooltip-row">
+        <span>Consumed</span>
+        <span>{money(actual, currency)}</span>
+      </div>
+      <div className="tooltip-row">
+        <span>Remaining</span>
+        <span>{money(remaining, currency)}</span>
+      </div>
+      <div className="tooltip-row">
+        <span>Consumption</span>
+        <span>{consumptionPct.toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function CategoryBudgetLabel({ cx, cy, midAngle, outerRadius, payload }) {
+  if (!payload?.showLabel) return null;
+
+  const radius = Number(outerRadius || 0);
+  const cos = Math.cos(-RADIAN * midAngle);
+  const sin = Math.sin(-RADIAN * midAngle);
+  const startX = cx + (radius + 4) * cos;
+  const startY = cy + (radius + 4) * sin;
+  const midX = cx + (radius + 16) * cos;
+  const midY = cy + (radius + 16) * sin;
+  const endX = midX + (cos >= 0 ? 24 : -24);
+  const endY = midY;
+  const labelX = endX + (cos >= 0 ? 5 : -5);
+  const anchor = cos >= 0 ? 'start' : 'end';
+
+  return (
+    <g className="category-pie-label">
+      <path
+        d={`M${startX},${startY}L${midX},${midY}L${endX},${endY}`}
+        stroke={payload.color || '#8a8375'}
+      />
+      <text x={labelX} y={endY} textAnchor={anchor} dominantBaseline="central">
+        {payload.category_name}
+      </text>
+    </g>
   );
 }
 
@@ -215,6 +279,7 @@ function Shell() {
     months: MonthManagerPage,
     budget: BudgetPage,
     transactions: TransactionsPage,
+    receivables: ReceivablesPage,
     savings: SavingsPage
   };
   const Page = pages[activeTab] || (currentMonth ? OverviewPage : MonthManagerPage);
@@ -290,11 +355,10 @@ function OverviewPage({ month, currency }) {
     ? (data.totals.actual_expenses / data.totals.planned_expenses) * 100
     : 0;
   const remainingBudget = data.totals.planned_expenses - data.totals.actual_expenses;
-  const trend = data.trend.map((row) => ({ ...row, label: String(row.day) }));
   const today = new Date();
   const daysInMonth = new Date(month.year, month.month, 0).getDate();
   const isCurrentMonth = month.year === today.getFullYear() && month.month === today.getMonth() + 1;
-  const elapsedDays = isCurrentMonth ? today.getDate() : Math.max(trend.length, 1);
+  const elapsedDays = isCurrentMonth ? today.getDate() : daysInMonth;
   const monthElapsedPct = (elapsedDays / daysInMonth) * 100;
   const daysLeftIncludingToday = Math.max(daysInMonth - elapsedDays + 1, 1);
   const safePerDay = Math.max(remainingBudget, 0) / daysLeftIncludingToday;
@@ -305,6 +369,35 @@ function OverviewPage({ month, currency }) {
   const spentDisplay = money(data.totals.actual_expenses, currency).replace(` ${currency}`, '');
   const progressPct = Math.min(Math.max(expensePct, 0), 100);
   const paceMarkerPct = Math.min(Math.max(monthElapsedPct, 0), 100);
+  const dailyRunRate = elapsedDays > 0 ? data.totals.actual_expenses / elapsedDays : 0;
+  const categoryTotal = data.spendingByCategory.reduce((total, row) => total + Number(row.planned_amount || 0), 0);
+  const categorySegments = data.spendingByCategory.flatMap((row) => {
+    const planned = Number(row.planned_amount || 0);
+    const actual = Number(row.actual_amount || 0);
+    const consumed = Math.min(actual, planned);
+    const remaining = Math.max(planned - consumed, 0);
+    const labelSegment = consumed >= remaining ? 'consumed' : 'remaining';
+    const segments = [];
+    if (consumed > 0) {
+      segments.push({ ...row, segment: 'consumed', value: consumed, showLabel: labelSegment === 'consumed' });
+    }
+    if (remaining > 0) {
+      segments.push({ ...row, segment: 'remaining', value: remaining, showLabel: labelSegment === 'remaining' });
+    }
+    return segments;
+  });
+  const trend = data.trend.map((row) => {
+    const isForecast = isCurrentMonth && row.day > elapsedDays;
+    return {
+      ...row,
+      label: String(row.day),
+      actual_expenses: isForecast ? null : row.expenses,
+      forecast_expenses: isCurrentMonth && row.day >= elapsedDays
+        ? data.totals.actual_expenses + (row.day - elapsedDays) * dailyRunRate
+        : null,
+      isForecast
+    };
+  });
 
   return (
     <div className="grid overview-grid">
@@ -353,25 +446,52 @@ function OverviewPage({ month, currency }) {
             <XAxis dataKey="label" stroke="#6b6559" tick={axisTick} />
             <YAxis stroke="#6b6559" tick={axisTick} />
             <Tooltip content={<DailyExpenseTooltip currency={currency} />} />
-            <Line type="monotone" dataKey="expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} />
+            <Line type="monotone" dataKey="actual_expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} connectNulls={false} />
+            <Line type="monotone" dataKey="forecast_expenses" stroke="#a8452f" strokeWidth={2.5} strokeDasharray="6 5" dot={false} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
       </section>
 
       <section className="panel chart-panel">
         <div className="section-head">
-          <h2>Spending by category</h2>
+          <h2>Budget by category</h2>
+          {categoryTotal > 0 && <span className="num">{money(categoryTotal, currency)}</span>}
         </div>
-        <ResponsiveContainer width="100%" height={230}>
-          <PieChart>
-            <Pie data={data.spendingByCategory} dataKey="amount" nameKey="category_name" outerRadius={85}>
-              {data.spendingByCategory.map((entry) => (
-                <Cell key={entry.category_name} fill={entry.color || '#8a8375'} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value) => money(value, currency)} contentStyle={tooltipStyle} />
-          </PieChart>
-        </ResponsiveContainer>
+        {categoryTotal === 0 ? (
+          <p className="empty-state">No category budget yet.</p>
+        ) : (
+          <div className="category-breakdown">
+            <div className="category-pie">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart margin={{ top: 12, right: 58, bottom: 12, left: 58 }}>
+	                  <Pie
+	                    data={categorySegments}
+	                    dataKey="value"
+	                    nameKey="category_name"
+	                    innerRadius={42}
+	                    outerRadius={76}
+	                    paddingAngle={0}
+	                    stroke="none"
+	                    strokeWidth={0}
+                      label={(props) => <CategoryBudgetLabel {...props} />}
+                      labelLine={false}
+	                  >
+	                    {categorySegments.map((entry, index) => (
+	                      <Cell
+	                        key={`${entry.category_name}-${entry.segment}-${index}`}
+	                        fill={entry.color || '#8a8375'}
+	                        opacity={entry.segment === 'consumed' ? 1 : 0.22}
+	                        stroke="none"
+	                        strokeWidth={0}
+	                      />
+	                    ))}
+	                  </Pie>
+	                  <Tooltip content={<CategoryBudgetTooltip currency={currency} />} />
+	                </PieChart>
+	              </ResponsiveContainer>
+	            </div>
+	          </div>
+	        )}
       </section>
 
       <section className="panel">
@@ -588,25 +708,16 @@ function MonthManagerPage({
 
 function BudgetPage({ month, currency }) {
   const [refresh, setRefresh] = useState(0);
-  const [type, setType] = useState('expense');
   const [showCategories, setShowCategories] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', icon: categoryEmojiFallbacks.food });
 
-  useEffect(() => {
-    setNewCategory({
-      name: '',
-      icon: type === 'expense' ? categoryEmojiFallbacks.food : categoryEmojiFallbacks.paycheck
-    });
-  }, [type]);
-
   const state = useLoad(async () => {
     if (!month) return null;
-    const [budget, expenseCategories, incomeCategories] = await Promise.all([
+    const [budget, expenseCategories] = await Promise.all([
       api(`/budget/${month.id}`),
-      api('/categories/expense'),
-      api('/categories/income')
+      api('/categories/expense')
     ]);
-    return { budget, expenseCategories, incomeCategories };
+    return { budget, expenseCategories };
   }, [month?.id, refresh]);
 
   async function saveLine(line, patch) {
@@ -620,7 +731,7 @@ function BudgetPage({ month, currency }) {
   async function addCategory() {
     const name = newCategory.name.trim();
     if (!name) return;
-    await api(`/categories/${type}`, {
+    await api('/categories/expense', {
       method: 'POST',
       body: JSON.stringify({ name, icon: newCategory.icon })
     });
@@ -629,7 +740,7 @@ function BudgetPage({ month, currency }) {
   }
 
   async function deactivateCategory(id) {
-    await api(`/categories/${type}/${id}`, { method: 'DELETE' });
+    await api(`/categories/expense/${id}`, { method: 'DELETE' });
     setRefresh((value) => value + 1);
   }
 
@@ -638,8 +749,8 @@ function BudgetPage({ month, currency }) {
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
   if (!state.data) return <Panel>Loading budget...</Panel>;
 
-  const lines = type === 'expense' ? state.data.budget.expenses : state.data.budget.income;
-  const categories = type === 'expense' ? state.data.expenseCategories : state.data.incomeCategories;
+  const lines = state.data.budget.expenses;
+  const categories = state.data.expenseCategories;
 
   return (
     <section className="panel">
@@ -647,21 +758,13 @@ function BudgetPage({ month, currency }) {
         <h2>Budget</h2>
         <div className="head-actions">
           <span className="num">{money(sum(lines, 'actual_amount'), currency)} actual</span>
-          <Segmented
-            value={type}
-            onChange={setType}
-            options={[
-              { value: 'expense', label: 'Expenses' },
-              { value: 'income', label: 'Income' }
-            ]}
-          />
         </div>
       </div>
 
       {lines.length === 0 ? (
-        <p className="empty-state">No {type} categories budgeted yet. Add one below to get started.</p>
+        <p className="empty-state">No expense categories budgeted yet. Add one below to get started.</p>
       ) : (
-        <BudgetTable type={type} lines={lines} currency={currency} onSave={saveLine} />
+        <BudgetTable lines={lines} currency={currency} onSave={saveLine} />
       )}
 
       <button className="text-toggle" onClick={() => setShowCategories((value) => !value)}>
@@ -686,7 +789,7 @@ function BudgetPage({ month, currency }) {
             </select>
             <input
               value={newCategory.name}
-              placeholder={`New ${type} category`}
+              placeholder="New expense category"
               onChange={(event) => setNewCategory((current) => ({ ...current, name: event.target.value }))}
               onKeyDown={(event) => event.key === 'Enter' && addCategory()}
             />
@@ -700,7 +803,7 @@ function BudgetPage({ month, currency }) {
                 <span className="category-emoji" aria-hidden="true">{categoryEmoji(category)}</span>
                 <span>{category.name}</span>
                 {category.is_active && (
-                  <button className="row-delete" title="Deactivate category" onClick={() => deactivateCategory(category.id)}>
+                  <button className="row-delete" title="Remove category" onClick={() => deactivateCategory(category.id)}>
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -713,7 +816,7 @@ function BudgetPage({ month, currency }) {
   );
 }
 
-function BudgetTable({ type, lines, currency, onSave }) {
+function BudgetTable({ lines, currency, onSave }) {
   return (
     <div className="table-wrap">
       <table>
@@ -722,14 +825,14 @@ function BudgetTable({ type, lines, currency, onSave }) {
             <th>Category</th>
             <th>Planned</th>
             <th>Actual</th>
-            <th>{type === 'expense' ? 'Remaining' : 'Difference'}</th>
+            <th>Remaining</th>
             <th>% used</th>
             <th>Recurring</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((line) => {
-            const over = type === 'expense' && line.actual_amount > line.planned_amount;
+            const over = line.actual_amount > line.planned_amount;
             return (
               <tr key={line.id} className={over ? 'over-budget' : ''}>
                 <td>
@@ -748,7 +851,7 @@ function BudgetTable({ type, lines, currency, onSave }) {
                   />
                 </td>
                 <td>{money(line.actual_amount, currency)}</td>
-                <td>{money(type === 'expense' ? line.remaining : line.difference, currency)}</td>
+                <td>{money(line.remaining, currency)}</td>
                 <td>
                   <div className="progress">
                     <span className={over ? 'over' : ''} style={{ width: `${Math.min(line.percent_used, 140)}%` }} />
@@ -844,6 +947,15 @@ function TransactionsPage({ month, currency }) {
         </div>
       </div>
 
+      {isExpense && (
+        <NaturalExpenseInput
+          categories={categories}
+          month={month}
+          currency={currency}
+          onDone={() => setRefresh((value) => value + 1)}
+        />
+      )}
+
       {showAdd && (
         <AddTransactionForm
           isExpense={isExpense}
@@ -872,13 +984,241 @@ function TransactionsPage({ month, currency }) {
   );
 }
 
+function multiplyAmount(quantity, unitPrice) {
+  const q = Number(quantity);
+  const unit = Number(unitPrice);
+  if (!Number.isFinite(q) || !Number.isFinite(unit) || q <= 0 || unit < 0) return '';
+  return (q * unit).toFixed(2);
+}
+
+function divideAmount(amount, quantity) {
+  const total = Number(amount);
+  const q = Number(quantity);
+  if (!Number.isFinite(total) || !Number.isFinite(q) || q <= 0 || total < 0) return '';
+  return (total / q).toFixed(2);
+}
+
+function NaturalExpenseInput({ categories, month, currency, onDone }) {
+  const [text, setText] = useState('');
+  const [drafts, setDrafts] = useState([]);
+  const [warnings, setWarnings] = useState([]);
+  const [provider, setProvider] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function parseText() {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const parsed = await api('/transactions/expenses/parse', {
+        method: 'POST',
+        body: JSON.stringify({ month_id: month.id, text })
+      });
+      setProvider(parsed.provider || '');
+      setWarnings(parsed.warnings || []);
+      setDrafts((parsed.items || []).map((item, index) => ({
+        id: `${Date.now()}-${index}`,
+        date: todayISO(),
+        productName: item.product_name || '',
+        quantity: String(item.quantity || 1),
+        unitPrice: String(item.unit_price || ''),
+        amount: multiplyAmount(item.quantity || 1, item.unit_price || ''),
+        category_id: item.category_id ? String(item.category_id) : '',
+        confidence: Number(item.confidence || 0)
+      })));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateDraft(id, patch) {
+    setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)));
+  }
+
+  function updateDraftCost(id, patch) {
+    setDrafts((current) => current.map((draft) => {
+      if (draft.id !== id) return draft;
+      const next = { ...draft, ...patch };
+      if (Object.prototype.hasOwnProperty.call(patch, 'amount')) {
+        next.unitPrice = divideAmount(next.amount, next.quantity);
+      } else {
+        next.amount = multiplyAmount(next.quantity, next.unitPrice);
+      }
+      return next;
+    }));
+  }
+
+  function removeDraft(id) {
+    setDrafts((current) => current.filter((draft) => draft.id !== id));
+  }
+
+  async function saveDrafts() {
+    const validDrafts = drafts.filter((draft) =>
+      draft.productName.trim()
+        && Number(draft.amount) >= 0
+        && Number(draft.quantity) > 0
+        && Number(draft.unitPrice) >= 0
+        && draft.category_id
+    );
+    if (validDrafts.length !== drafts.length || validDrafts.length === 0) {
+      setError('Review every draft row before saving. Product name, quantity, unit price, amount, and category are required.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    try {
+      await api('/transactions/expenses/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          transactions: validDrafts.map((draft) => ({
+            month_id: month.id,
+            transaction_date: draft.date,
+            description: draft.productName,
+            quantity: draft.quantity,
+            unit_price: draft.unitPrice,
+            price: draft.amount,
+            category_id: Number(draft.category_id)
+          }))
+        })
+      });
+      setText('');
+      setDrafts([]);
+      setWarnings([]);
+      setProvider('');
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="natural-expense">
+      <div className="natural-expense-input">
+        <textarea
+          value={text}
+          placeholder="Example: I bought 2 milks 4mad each, 1 chicken with 40dh, and took the bus with 4dh"
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              parseText();
+            }
+          }}
+          rows={3}
+        />
+        <button className="primary" onClick={parseText} disabled={busy || !text.trim()}>
+          {busy ? 'Parsing...' : 'Parse'}
+        </button>
+      </div>
+      {provider && <p className="parse-provider">Drafted with {provider === 'local' ? 'local parser' : provider}</p>}
+      {error && <p className="parse-error">{error}</p>}
+      {warnings.length > 0 && (
+        <div className="parse-warnings">
+          {warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+        </div>
+      )}
+      {drafts.length > 0 && (
+        <div className="draft-review">
+          <div className="draft-review-head">
+            <h3>Review parsed expenses</h3>
+            <button className="primary" onClick={saveDrafts} disabled={busy}>
+              Save all
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table className="draft-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Qty</th>
+                  <th>Unit price</th>
+                  <th>Amount</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {drafts.map((draft) => (
+                  <tr key={draft.id}>
+                    <td>
+                      <input type="date" value={draft.date} onChange={(event) => updateDraft(draft.id, { date: event.target.value })} />
+                    </td>
+                    <td>
+                      <input value={draft.productName} onChange={(event) => updateDraft(draft.id, { productName: event.target.value })} />
+                    </td>
+                    <td>
+                      <input type="number" min="0.01" step="0.01" value={draft.quantity} onChange={(event) => updateDraftCost(draft.id, { quantity: event.target.value })} />
+                    </td>
+                    <td>
+                      <input type="number" min="0" step="0.01" value={draft.unitPrice} onChange={(event) => updateDraftCost(draft.id, { unitPrice: event.target.value })} />
+                    </td>
+                    <td>
+                      <input type="number" min="0" step="0.01" value={draft.amount} onChange={(event) => updateDraftCost(draft.id, { amount: event.target.value })} />
+                    </td>
+                    <td>
+                      <select value={draft.category_id} onChange={(event) => updateDraft(draft.id, { category_id: event.target.value })}>
+                        <option value="">Pick category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <span className={draft.confidence >= 0.75 ? 'draft-status confident' : 'draft-status'}>
+                        {draft.confidence >= 0.75 ? 'Ready' : 'Check'}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="icon-button" title="Remove draft" onClick={() => removeDraft(draft.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="draft-total">Draft total: {money(drafts.reduce((sum, draft) => sum + Number(draft.amount || 0), 0), currency)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AddTransactionForm({ isExpense, categories, month, onDone }) {
   const [form, setForm] = useState({
     date: todayISO(),
     description: '',
+    quantity: '1',
+    unitPrice: '',
     amount: '',
     category_id: categories[0]?.id || ''
   });
+
+  function updateFormCost(patch) {
+    setForm((current) => {
+      const next = { ...current, ...patch };
+      if (!isExpense) return next;
+      if (Object.prototype.hasOwnProperty.call(patch, 'amount')) {
+        next.unitPrice = divideAmount(next.amount, next.quantity);
+      } else {
+        next.amount = multiplyAmount(next.quantity, next.unitPrice);
+      }
+      return next;
+    });
+  }
 
   async function submit() {
     if (!form.amount || !form.description) return;
@@ -888,6 +1228,8 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
           month_id: month.id,
           transaction_date: form.date,
           description: form.description,
+          quantity: form.quantity || 1,
+          unit_price: form.unitPrice || divideAmount(form.amount, form.quantity || 1),
           price: form.amount,
           category_id: Number(form.category_id)
         }
@@ -911,13 +1253,33 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
         onChange={(event) => setForm({ ...form, description: event.target.value })}
         autoFocus
       />
+      {isExpense && (
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          value={form.quantity}
+          placeholder="Qty"
+          onChange={(event) => updateFormCost({ quantity: event.target.value })}
+        />
+      )}
+      {isExpense && (
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={form.unitPrice}
+          placeholder="Unit price"
+          onChange={(event) => updateFormCost({ unitPrice: event.target.value })}
+        />
+      )}
       <input
         type="number"
         min="0"
         step="0.01"
         value={form.amount}
         placeholder="Amount"
-        onChange={(event) => setForm({ ...form, amount: event.target.value })}
+        onChange={(event) => (isExpense ? updateFormCost({ amount: event.target.value }) : setForm({ ...form, amount: event.target.value }))}
         onKeyDown={(event) => event.key === 'Enter' && submit()}
       />
       <select value={form.category_id} onChange={(event) => setForm({ ...form, category_id: event.target.value })}>
@@ -937,12 +1299,27 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
 function TransactionTable({ isExpense, rows, categories, currency, flipSort, onChange }) {
   const [editing, setEditing] = useState(null);
 
+  function updateEditingCost(patch) {
+    setEditing((current) => {
+      const next = { ...current, ...patch };
+      if (!isExpense) return next;
+      if (Object.prototype.hasOwnProperty.call(patch, 'amount')) {
+        next.unitPrice = divideAmount(next.amount, next.quantity);
+      } else {
+        next.amount = multiplyAmount(next.quantity, next.unitPrice);
+      }
+      return next;
+    });
+  }
+
   async function saveEdit() {
     const path = isExpense ? `/transactions/expenses/${editing.id}` : `/transactions/income/${editing.id}`;
     const body = isExpense
       ? {
           transaction_date: editing.date,
           description: editing.description,
+          quantity: editing.quantity,
+          unit_price: editing.unitPrice,
           price: editing.amount,
           category_id: Number(editing.category_id)
         }
@@ -970,31 +1347,50 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
           <tr>
             <th><button onClick={() => flipSort('date')}>Date</button></th>
             <th><button onClick={() => flipSort(isExpense ? 'description' : 'source')}>{isExpense ? 'Product' : 'Source'}</button></th>
+            {isExpense && <th><button onClick={() => flipSort('quantity')}>Qty</button></th>}
+            {isExpense && <th><button onClick={() => flipSort('unit_price')}>Unit</button></th>}
             <th><button onClick={() => flipSort(isExpense ? 'price' : 'amount')}>Amount</button></th>
             <th><button onClick={() => flipSort('category')}>Category</button></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
-            const rowDescription = isExpense ? row.description : row.source_name;
-            const rowAmount = isExpense ? row.price : row.amount;
+	          {rows.map((row) => {
+	            const rowDescription = isExpense ? row.description : row.source_name;
+	            const rowDate = dateOnly(row.date);
+	            const rowQuantity = isExpense ? row.quantity : null;
+	            const rowUnitPrice = isExpense ? row.unit_price : null;
+	            const rowAmount = isExpense ? row.price : row.amount;
             const isEditing = editing?.id === row.id;
             return (
               <tr key={row.id} className={isEditing ? 'editing' : ''}>
-                <td>
-                  {isEditing ? (
-                    <input type="date" value={editing.date} onChange={(event) => setEditing({ ...editing, date: event.target.value })} />
-                  ) : row.date}
-                </td>
+	                <td>
+	                  {isEditing ? (
+	                    <input type="date" value={dateOnly(editing.date)} onChange={(event) => setEditing({ ...editing, date: event.target.value })} />
+	                  ) : rowDate}
+	                </td>
                 <td>
                   {isEditing ? (
                     <input value={editing.description} onChange={(event) => setEditing({ ...editing, description: event.target.value })} />
                   ) : rowDescription}
                 </td>
+                {isExpense && (
+                  <td>
+                    {isEditing ? (
+                      <input type="number" min="0.01" step="0.01" value={editing.quantity} onChange={(event) => updateEditingCost({ quantity: event.target.value })} />
+                    ) : rowQuantity}
+                  </td>
+                )}
+                {isExpense && (
+                  <td>
+                    {isEditing ? (
+                      <input type="number" min="0" step="0.01" value={editing.unitPrice} onChange={(event) => updateEditingCost({ unitPrice: event.target.value })} />
+                    ) : money(rowUnitPrice, currency)}
+                  </td>
+                )}
                 <td>
                   {isEditing ? (
-                    <input type="number" min="0" step="0.01" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: event.target.value })} />
+                    <input type="number" min="0" step="0.01" value={editing.amount} onChange={(event) => updateEditingCost({ amount: event.target.value })} />
                   ) : money(rowAmount, currency)}
                 </td>
                 <td>
@@ -1017,10 +1413,12 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
                     <button
                       className="row-edit"
                       onClick={() =>
-                        setEditing({
-                          id: row.id,
-                          date: row.date,
-                          description: rowDescription,
+	                        setEditing({
+	                          id: row.id,
+	                          date: rowDate,
+	                          description: rowDescription,
+                          quantity: rowQuantity,
+                          unitPrice: rowUnitPrice ?? divideAmount(rowAmount, rowQuantity || 1),
                           amount: rowAmount,
                           category_id: row.category_id
                         })
@@ -1045,6 +1443,197 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
 /* ---------------------------------------------------------------- */
 /* Savings — leads with the number that actually matters.           */
 /* ---------------------------------------------------------------- */
+
+function ReceivablesPage({ month, currency }) {
+  const [refresh, setRefresh] = useState(0);
+  const [form, setForm] = useState({
+    person_name: '',
+    description: '',
+    amount: '',
+    status: 'not_yet'
+  });
+  const [editing, setEditing] = useState(null);
+  const state = useLoad(
+    () => (month ? api(`/receivables?${new URLSearchParams({ monthId: month.id })}`) : Promise.resolve(null)),
+    [month?.id, refresh]
+  );
+
+  if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
+  if (state.loading) return <Panel>Loading receivables...</Panel>;
+  if (state.error) return <Panel tone="error">{state.error}</Panel>;
+  if (!state.data) return <Panel>Loading receivables...</Panel>;
+
+  const rows = state.data;
+  const notYetTotal = rows.filter((row) => row.status === 'not_yet').reduce((total, row) => total + Number(row.amount), 0);
+  const paidTotal = rows.filter((row) => row.status === 'paid').reduce((total, row) => total + Number(row.amount), 0);
+
+  async function addReceivable() {
+    if (!form.person_name.trim() || !form.amount) return;
+    await api('/receivables', {
+      method: 'POST',
+      body: JSON.stringify({
+        month_id: month.id,
+        person_name: form.person_name,
+        description: form.description,
+        amount: form.amount,
+        status: form.status
+      })
+    });
+    setForm({ person_name: '', description: '', amount: '', status: 'not_yet' });
+    setRefresh((value) => value + 1);
+  }
+
+  async function saveEdit() {
+    await api(`/receivables/${editing.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        person_name: editing.person_name,
+        description: editing.description,
+        amount: editing.amount,
+        status: editing.status
+      })
+    });
+    setEditing(null);
+    setRefresh((value) => value + 1);
+  }
+
+  async function updateStatus(row, status) {
+    await api(`/receivables/${row.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    });
+    setRefresh((value) => value + 1);
+  }
+
+  async function deleteReceivable(id) {
+    await api(`/receivables/${id}`, { method: 'DELETE' });
+    setRefresh((value) => value + 1);
+  }
+
+  return (
+    <section className="panel">
+      <div className="section-head">
+        <h2>Receivable</h2>
+        <div className="receivable-summary">
+          <span><strong className="num">{money(notYetTotal, currency)}</strong> not yet</span>
+          <span><strong className="num">{money(paidTotal, currency)}</strong> paid</span>
+        </div>
+      </div>
+
+      <div className="add-form receivable-form">
+        <input
+          value={form.person_name}
+          placeholder="Person"
+          onChange={(event) => setForm({ ...form, person_name: event.target.value })}
+          autoFocus
+        />
+        <input
+          value={form.description}
+          placeholder="What for"
+          onChange={(event) => setForm({ ...form, description: event.target.value })}
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={form.amount}
+          placeholder="Amount"
+          onChange={(event) => setForm({ ...form, amount: event.target.value })}
+          onKeyDown={(event) => event.key === 'Enter' && addReceivable()}
+        />
+        <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+          <option value="not_yet">Not yet</option>
+          <option value="paid">Paid</option>
+        </select>
+        <button className="primary" onClick={addReceivable}>
+          <Plus size={15} /> Add
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="empty-state">No receivables for this month.</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th>What for</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const isEditing = editing?.id === row.id;
+                return (
+                  <tr key={row.id} className={isEditing ? 'editing' : ''}>
+                    <td>
+                      {isEditing ? (
+                        <input value={editing.person_name} onChange={(event) => setEditing({ ...editing, person_name: event.target.value })} />
+                      ) : row.person_name}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input value={editing.description || ''} onChange={(event) => setEditing({ ...editing, description: event.target.value })} />
+                      ) : row.description || <span className="muted">No details</span>}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input type="number" min="0" step="0.01" value={editing.amount} onChange={(event) => setEditing({ ...editing, amount: event.target.value })} />
+                      ) : money(row.amount, currency)}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value })}>
+                          <option value="not_yet">Not yet</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                      ) : (
+                        <button
+                          className={row.status === 'paid' ? 'status-pill paid' : 'status-pill'}
+                          onClick={() => updateStatus(row, row.status === 'paid' ? 'not_yet' : 'paid')}
+                        >
+                          {row.status === 'paid' ? 'Paid' : 'Not yet'}
+                        </button>
+                      )}
+                    </td>
+                    <td className="row-actions">
+                      {isEditing ? (
+                        <button className="icon-button primary" title="Save" onClick={saveEdit}>
+                          <Save size={15} />
+                        </button>
+                      ) : (
+                        <button
+                          className="row-edit"
+                          onClick={() =>
+                            setEditing({
+                              id: row.id,
+                              person_name: row.person_name,
+                              description: row.description || '',
+                              amount: row.amount,
+                              status: row.status
+                            })
+                          }
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button className="row-delete" title="Delete" onClick={() => deleteReceivable(row.id)}>
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function SavingsPage({ currency }) {
   const state = useLoad(() => api('/savings'), []);
@@ -1168,6 +1757,8 @@ function SavingsPage({ currency }) {
         </div>
       </section>
 
+      <ZakatSection currency={currency} />
+
       <section className="panel">
         <div className="section-head">
           <h2>Monthly savings</h2>
@@ -1202,6 +1793,187 @@ function SavingsPage({ currency }) {
         )}
       </section>
     </div>
+  );
+}
+
+const zakatStatusLabels = {
+  missing_price: 'Add price',
+  not_started: 'Not started',
+  below_nisab: 'Below nisab',
+  tracking: 'Tracking',
+  due: 'Due'
+};
+
+const zakatEventLabels = {
+  initial_anchor: 'Initial anchor',
+  missing_price: 'Waiting for price',
+  nisab_reached: 'Nisab reached',
+  anchor_reset: 'Anchor reset',
+  zakat_due: 'Zakat due',
+  zakat_paid: 'Zakat paid'
+};
+
+function ZakatSection({ currency }) {
+  const [refresh, setRefresh] = useState(0);
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState('');
+  const state = useLoad(() => api('/zakat'), [refresh]);
+
+  async function markPaid() {
+    setPaying(true);
+    setError('');
+    try {
+      await api('/zakat/pay', { method: 'POST' });
+      setRefresh((value) => value + 1);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  if (state.loading) return <Panel>Loading zakat...</Panel>;
+  if (state.error) return <Panel tone="error">{state.error}</Panel>;
+  if (!state.data) return <Panel>Loading zakat...</Panel>;
+
+  const zakatEvents = [
+    ...(state.data.calculations.gold.events || []),
+    ...(state.data.calculations.silver.events || [])
+  ].sort((a, b) => b.date.localeCompare(a.date) || a.standard.localeCompare(b.standard));
+  const dueNow = Number(state.data.due_now ?? Math.max(
+    Number(state.data.calculations.gold.zakat_due_amount || 0),
+    Number(state.data.calculations.silver.zakat_due_amount || 0)
+  ));
+
+  return (
+    <section className="panel zakat-panel">
+      <div className="section-head">
+        <h2>Zakat</h2>
+        <span className="muted">Initial anchor {dateOnly(state.data.settings.gold_anchor_date)} · 354-day haul</span>
+      </div>
+
+      <div className="zakat-summary">
+        <div>
+          <span>Due now</span>
+          <strong className="num">{money(dueNow, currency)}</strong>
+          <button className="status-pill paid" disabled={!state.data.has_unpaid_zakat || paying} onClick={markPaid}>
+            {state.data.has_unpaid_zakat ? (paying ? 'Saving...' : 'Mark paid') : 'Paid'}
+          </button>
+        </div>
+      </div>
+      {error && <p className="parse-error">{error}</p>}
+
+      <div className="zakat-cards">
+        <ZakatNisabCard calculation={state.data.calculations.gold} currency={currency} />
+        <ZakatNisabCard calculation={state.data.calculations.silver} currency={currency} />
+      </div>
+
+      <p className="zakat-refresh-note">
+        {state.data.price_refresh.configured
+          ? 'Gold and silver prices refresh automatically once per day at midnight.'
+          : 'Add GOLDAPI_KEY to enable automatic daily gold and silver price updates.'}
+      </p>
+
+      <div className="zakat-event-log">
+        <div className="section-head">
+          <h3>Zakat events</h3>
+        </div>
+        {zakatEvents.length === 0 ? (
+          <p className="empty-state">No zakat events recorded yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="zakat-event-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Standard</th>
+                  <th>Event</th>
+                  <th>Savings</th>
+                  <th>Nisab</th>
+                  <th>Amount</th>
+                  <th>Paid</th>
+                  <th>Anchor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {zakatEvents.map((event, index) => (
+                  <tr key={`${event.standard}-${event.type}-${event.date}-${index}`}>
+                    <td>{dateOnly(event.date)}</td>
+                    <td>{event.standard}</td>
+                    <td>
+                      <span className={`event-pill ${event.type}`}>
+                        {zakatEventLabels[event.type] || event.title || event.type}
+                      </span>
+                    </td>
+                    <td>{event.savings == null ? '-' : money(event.savings, currency)}</td>
+                    <td>{event.nisab == null ? '-' : money(event.nisab, currency)}</td>
+                    <td>{event.amount_due == null ? '-' : money(event.amount_due, currency)}</td>
+                    <td>{event.amount_due == null ? '-' : event.paid ? 'Yes' : 'No'}</td>
+                    <td>{event.anchor_date || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {state.data.prices.length === 0 ? (
+        <p className="empty-state">No automatic nisab price checkpoint yet.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="zakat-price-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Gold / gram</th>
+                <th>Gold nisab</th>
+                <th>Silver / gram</th>
+                <th>Silver nisab</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.data.prices.map((row) => (
+                <tr key={row.id}>
+                  <td>{dateOnly(row.entry_date)}</td>
+                  <td>{row.gold_price_per_gram == null ? '-' : money(row.gold_price_per_gram, currency)}</td>
+                  <td>{row.gold_price_per_gram == null ? '-' : money(row.gold_price_per_gram * 85, currency)}</td>
+                  <td>{row.silver_price_per_gram == null ? '-' : money(row.silver_price_per_gram, currency)}</td>
+                  <td>{row.silver_price_per_gram == null ? '-' : money(row.silver_price_per_gram * 595, currency)}</td>
+                  <td>{row.source || 'goldapi'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ZakatNisabCard({ calculation, currency }) {
+  const status = zakatStatusLabels[calculation.status] || calculation.status;
+  return (
+    <article className={`zakat-card ${calculation.status}`}>
+      <div className="zakat-card-head">
+        <div>
+          <span>{calculation.standard}</span>
+          <strong>{calculation.grams}g nisab</strong>
+        </div>
+        <em>{status}</em>
+      </div>
+      <div className="zakat-progress">
+        <span style={{ width: `${Math.min((calculation.days_elapsed / 354) * 100, 100)}%` }} />
+      </div>
+      <div className="zakat-metrics">
+        <span>Current nisab <strong className="num">{calculation.current_nisab == null ? '-' : money(calculation.current_nisab, currency)}</strong></span>
+        <span>Price / gram <strong className="num">{calculation.current_price_per_gram == null ? '-' : money(calculation.current_price_per_gram, currency)}</strong></span>
+        <span>Active anchor <strong>{calculation.active_anchor_date || '-'}</strong></span>
+        <span>Due date <strong>{calculation.due_date || '-'}</strong></span>
+        <span>Days <strong className="num">{calculation.days_elapsed} / 354</strong></span>
+      </div>
+    </article>
   );
 }
 

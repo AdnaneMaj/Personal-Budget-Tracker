@@ -19,12 +19,19 @@ export async function getDashboard(monthId) {
   const spendingByCategory = await query(
     `SELECT c.name AS category_name,
             c.color,
-            COALESCE(SUM(t.price), 0) AS amount
-     FROM expense_categories c
-     JOIN expense_transactions t ON t.category_id = c.id
-     WHERE t.month_id = $1
-     GROUP BY c.name, c.color
-     ORDER BY amount DESC`,
+            bl.planned_amount,
+            COALESCE(actuals.amount, 0) AS actual_amount
+     FROM budget_lines bl
+     JOIN expense_categories c ON c.id = bl.category_id
+     LEFT JOIN (
+       SELECT category_id, SUM(price) AS amount
+       FROM expense_transactions
+       WHERE month_id = $1
+       GROUP BY category_id
+     ) actuals ON actuals.category_id = bl.category_id
+     WHERE bl.month_id = $1
+       AND bl.category_type = 'expense'
+     ORDER BY bl.planned_amount DESC, c.name ASC`,
     [monthId]
   );
 
@@ -37,12 +44,7 @@ export async function getDashboard(monthId) {
      days AS (
        SELECT generate_series(
          make_date((SELECT year FROM selected_month), (SELECT month FROM selected_month), 1),
-         CASE
-           WHEN (SELECT year FROM selected_month) = EXTRACT(YEAR FROM CURRENT_DATE)::int
-            AND (SELECT month FROM selected_month) = EXTRACT(MONTH FROM CURRENT_DATE)::int
-           THEN CURRENT_DATE
-           ELSE (make_date((SELECT year FROM selected_month), (SELECT month FROM selected_month), 1) + interval '1 month - 1 day')::date
-         END,
+         (make_date((SELECT year FROM selected_month), (SELECT month FROM selected_month), 1) + interval '1 month - 1 day')::date,
          interval '1 day'
        )::date AS day
      ),
@@ -185,7 +187,7 @@ export async function getDashboard(monthId) {
 
   return {
     totals: numberFields(totals.rows[0] || {}, ['planned_expenses', 'actual_expenses', 'actual_income']),
-    spendingByCategory: spendingByCategory.rows.map((row) => numberFields(row, ['amount'])),
+    spendingByCategory: spendingByCategory.rows.map((row) => numberFields(row, ['planned_amount', 'actual_amount'])),
     trend: trend.rows.map((row) => ({
       ...numberFields(row, ['day', 'daily_expenses', 'expenses', 'income']),
       expense_categories: (row.expense_categories || []).map((category) => ({

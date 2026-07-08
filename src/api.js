@@ -36,3 +36,8 @@ export function monthLabel(month) {
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
+
+export function dateOnly(value) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}

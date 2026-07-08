@@ -5,7 +5,10 @@ import * as monthController from '../controllers/monthController.js';
 import * as categoryController from '../controllers/categoryController.js';
 import * as budgetController from '../controllers/budgetController.js';
 import * as transactionController from '../controllers/transactionController.js';
+import * as expenseParserController from '../controllers/expenseParserController.js';
+import * as receivableController from '../controllers/receivableController.js';
 import * as savingsController from '../controllers/savingsController.js';
+import * as zakatController from '../controllers/zakatController.js';
 import * as dashboardController from '../controllers/dashboardController.js';
 
 export const apiRouter = express.Router();
@@ -28,6 +31,8 @@ apiRouter.get('/budget/:monthId', asyncHandler(budgetController.getBudget));
 apiRouter.patch('/budget-lines/:id', asyncHandler(budgetController.updateBudgetLine));
 
 apiRouter.get('/transactions/expenses', asyncHandler(transactionController.listExpenseTransactions));
+apiRouter.post('/transactions/expenses/parse', asyncHandler(expenseParserController.parseExpenseText));
+apiRouter.post('/transactions/expenses/bulk', asyncHandler(transactionController.createExpenseTransactions));
 apiRouter.post('/transactions/expenses', asyncHandler(transactionController.createExpenseTransaction));
 apiRouter.patch('/transactions/expenses/:id', asyncHandler(transactionController.updateExpenseTransaction));
 apiRouter.delete('/transactions/expenses/:id', asyncHandler(transactionController.deleteExpenseTransaction));
@@ -37,6 +42,14 @@ apiRouter.post('/transactions/income', asyncHandler(transactionController.create
 apiRouter.patch('/transactions/income/:id', asyncHandler(transactionController.updateIncomeEntry));
 apiRouter.delete('/transactions/income/:id', asyncHandler(transactionController.deleteIncomeEntry));
 
+apiRouter.get('/receivables', asyncHandler(receivableController.listReceivables));
+apiRouter.post('/receivables', asyncHandler(receivableController.createReceivable));
+apiRouter.patch('/receivables/:id', asyncHandler(receivableController.updateReceivable));
+apiRouter.delete('/receivables/:id', asyncHandler(receivableController.deleteReceivable));
+
 apiRouter.get('/savings', asyncHandler(savingsController.listSavings));
+
+apiRouter.get('/zakat', asyncHandler(zakatController.getZakatSummary));
+apiRouter.post('/zakat/pay', asyncHandler(zakatController.markZakatPaid));
 
 apiRouter.get('/dashboard/:monthId', asyncHandler(dashboardController.getDashboard));

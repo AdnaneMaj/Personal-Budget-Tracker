@@ -77,5 +77,67 @@ export async function updateCategory(type, id, payload) {
 }
 
 export async function deactivateCategory(type, id) {
-  return updateCategory(type, id, { is_active: false });
+  const table = tableFor(type);
+  const transactionTable = type === 'expense' ? 'expense_transactions' : 'income_entries';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const category = await client.query(
+      `SELECT id, name, icon, color, is_active
+       FROM ${table}
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+    if (!category.rows[0]) throw new HttpError(404, 'category not found');
+
+    const usage = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM ${transactionTable}
+       WHERE category_id = $1`,
+      [id]
+    );
+    const budgetUsage = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM budget_lines
+       WHERE category_id = $1
+         AND category_type = $2
+         AND (planned_amount > 0 OR is_recurring = TRUE)`,
+      [id, type]
+    );
+
+    if (usage.rows[0].count === 0 && budgetUsage.rows[0].count === 0) {
+      await client.query(
+        `DELETE FROM budget_lines
+         WHERE category_id = $1
+           AND category_type = $2`,
+        [id, type]
+      );
+      const deleted = await client.query(
+        `DELETE FROM ${table}
+         WHERE id = $1
+         RETURNING id, name, icon, color, is_active`,
+        [id]
+      );
+      await client.query('COMMIT');
+      return { ...deleted.rows[0], deleted: true };
+    }
+
+    const deactivated = await client.query(
+      `UPDATE ${table}
+       SET is_active = FALSE
+       WHERE id = $1
+       RETURNING id, name, icon, color, is_active`,
+      [id]
+    );
+    await client.query('COMMIT');
+    return { ...deactivated.rows[0], deleted: false };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }

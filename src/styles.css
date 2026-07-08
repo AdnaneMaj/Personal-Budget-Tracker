@@ -39,14 +39,16 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: var(--ink);
 }
 
 button,
 select,
-input {
+input,
+textarea {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--paper-raised);
@@ -77,8 +79,15 @@ select:focus-visible {
 }
 
 input,
-select {
+select,
+textarea {
   padding: 0 10px;
+}
+
+textarea {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  resize: vertical;
 }
 
 input[type="number"],
@@ -153,6 +162,7 @@ input[type="checkbox"]:checked::after {
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -167,6 +177,11 @@ h1 {
 h2 {
   font-family: var(--font-display);
   font-size: 18px;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -297,6 +312,34 @@ h2 {
 
 .chart-panel {
   min-width: 0;
+}
+
+.category-breakdown {
+  display: grid;
+  place-items: center;
+}
+
+.category-pie {
+  position: relative;
+  width: min(100%, 430px);
+  min-height: 260px;
+}
+
+.category-pie-label {
+  pointer-events: none;
+}
+
+.category-pie-label path {
+  fill: none;
+  stroke-width: 1.2;
+  opacity: 0.85;
+}
+
+.category-pie-label text {
+  fill: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .error,
@@ -736,6 +779,328 @@ tr.editing .row-delete,
   min-width: 140px;
 }
 
+/* ---------- natural expense entry ---------- */
+
+.natural-expense {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+
+.natural-expense-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.natural-expense-input textarea {
+  min-height: 74px;
+}
+
+.natural-expense-input button {
+  min-width: 86px;
+}
+
+.parse-provider,
+.draft-total {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.parse-error {
+  color: var(--out);
+  font-size: 13px;
+}
+
+.parse-warnings {
+  display: grid;
+  gap: 4px;
+  color: var(--gold);
+  font-size: 13px;
+}
+
+.draft-review {
+  display: grid;
+  gap: 10px;
+}
+
+.draft-review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.draft-table {
+  min-width: 860px;
+}
+
+.draft-table input,
+.draft-table select {
+  width: 100%;
+}
+
+.draft-status {
+  display: inline-flex;
+  min-width: 54px;
+  justify-content: center;
+  padding: 3px 7px;
+  border: 1px solid #d9b3a8;
+  color: var(--out);
+  font-size: 12px;
+}
+
+.draft-status.confident {
+  border-color: #b8cdbf;
+  color: var(--in);
+}
+
+.receivable-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.receivable-summary span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.receivable-form input:nth-child(2) {
+  flex: 1;
+  min-width: 160px;
+}
+
+.status-pill {
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: #d9b3a8;
+  background: #fbf1ed;
+  color: var(--out);
+  font-size: 12px;
+}
+
+.status-pill.paid {
+  border-color: #b8cdbf;
+  background: #eef6f0;
+  color: var(--in);
+}
+
+.zakat-panel {
+  grid-column: 1 / -1;
+}
+
+.zakat-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.zakat-summary div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: #fbfaf5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.zakat-summary span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.zakat-summary strong {
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.zakat-summary button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.zakat-summary button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.zakat-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.zakat-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: #fbfaf5;
+  display: grid;
+  gap: 12px;
+}
+
+.zakat-card.due {
+  border-color: #d9b3a8;
+  background: #fbf1ed;
+}
+
+.zakat-card.tracking {
+  border-color: #b8cdbf;
+  background: #eef6f0;
+}
+
+.zakat-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  text-transform: capitalize;
+}
+
+.zakat-card-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.zakat-card-head span,
+.zakat-card-head em {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.zakat-card-head strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.zakat-card-head em {
+  padding: 3px 7px;
+  border: 1px solid currentColor;
+}
+
+.zakat-progress {
+  height: 8px;
+  overflow: hidden;
+  background: var(--line);
+  border-radius: 99px;
+}
+
+.zakat-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.zakat-card.due .zakat-progress span {
+  background: var(--out);
+}
+
+.zakat-card.tracking .zakat-progress span {
+  background: var(--in);
+}
+
+.zakat-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 14px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.zakat-metrics span {
+  display: grid;
+  gap: 2px;
+}
+
+.zakat-metrics strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.zakat-refresh-note {
+  margin-bottom: 12px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.zakat-event-log {
+  margin-bottom: 16px;
+}
+
+.zakat-event-table {
+  min-width: 900px;
+}
+
+.event-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.event-pill.nisab_reached {
+  border-color: #b8cdbf;
+  color: var(--in);
+}
+
+.event-pill.anchor_reset,
+.event-pill.zakat_due {
+  border-color: #d9b3a8;
+  color: var(--out);
+}
+
+.zakat-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.zakat-controls.single {
+  grid-template-columns: 1fr;
+}
+
+.zakat-form {
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.zakat-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 130px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.zakat-form input {
+  width: 140px;
+  font-family: var(--font-mono);
+}
+
+.zakat-price-table {
+  min-width: 780px;
+}
+
 .forecast-control {
   display: inline-flex;
   align-items: center;
@@ -1070,6 +1435,12 @@ tr.editing .row-delete,
     grid-template-columns: 1fr;
   }
 
+  .zakat-summary,
+  .zakat-cards,
+  .zakat-controls {
+    grid-template-columns: 1fr;
+  }
+
   .tabs {
     overflow-x: auto;
   }
@@ -1103,6 +1474,10 @@ tr.editing .row-delete,
 
 @media (max-width: 620px) {
   .month-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .zakat-metrics {
     grid-template-columns: 1fr;
   }
 }

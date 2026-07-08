@@ -15,14 +15,6 @@ export async function ensureBudgetLines(client, monthId) {
     [monthId]
   );
 
-  await client.query(
-    `INSERT INTO budget_lines (month_id, category_id, category_type, planned_amount)
-     SELECT $1, id, 'income', 0
-     FROM income_categories
-     WHERE is_active = TRUE
-     ON CONFLICT (month_id, category_id, category_type) DO NOTHING`,
-    [monthId]
-  );
 }
 
 export async function listMonths() {
@@ -111,12 +103,13 @@ export async function createMonth({ year, month, status = 'open', copyFromPrevio
     const previousMonthId = previous.rows[0]?.id;
     if (previousMonthId) {
       await client.query(
-        `INSERT INTO budget_lines (month_id, category_id, category_type, planned_amount, is_recurring)
-         SELECT $1, category_id, category_type, planned_amount, is_recurring
-         FROM budget_lines
-         WHERE month_id = $2
-           AND ($3::boolean = TRUE OR is_recurring = TRUE)
-         ON CONFLICT (month_id, category_id, category_type) DO NOTHING`,
+	        `INSERT INTO budget_lines (month_id, category_id, category_type, planned_amount, is_recurring)
+	         SELECT $1, category_id, category_type, planned_amount, is_recurring
+	         FROM budget_lines
+	         WHERE month_id = $2
+	           AND category_type = 'expense'
+	           AND ($3::boolean = TRUE OR is_recurring = TRUE)
+	         ON CONFLICT (month_id, category_id, category_type) DO NOTHING`,
         [target.id, previousMonthId, copyFromPrevious]
       );
     }

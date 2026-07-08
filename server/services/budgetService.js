@@ -45,47 +45,9 @@ async function getExpenseLines(monthId) {
   return rows.map(lineMetrics);
 }
 
-async function getIncomeLines(monthId) {
-  const { rows } = await query(
-    `SELECT bl.id,
-            bl.month_id,
-            bl.category_id,
-            bl.category_type,
-            bl.planned_amount,
-            bl.is_recurring,
-            c.name AS category_name,
-            c.icon,
-            c.color,
-            c.is_active,
-            COALESCE(actuals.actual_amount, 0) AS actual_amount
-     FROM budget_lines bl
-     JOIN income_categories c ON c.id = bl.category_id
-     LEFT JOIN (
-       SELECT category_id, SUM(amount) AS actual_amount
-       FROM income_entries
-       WHERE month_id = $1
-       GROUP BY category_id
-     ) actuals ON actuals.category_id = bl.category_id
-     WHERE bl.month_id = $1 AND bl.category_type = 'income'
-     ORDER BY c.is_active DESC, c.name ASC`,
-    [monthId]
-  );
-  return rows.map((line) => {
-    const metric = lineMetrics(line);
-    return {
-      ...metric,
-      difference: metric.actual_amount - metric.planned_amount
-    };
-  });
-}
-
 export async function getBudget(monthId) {
   await ensureLinesForMonth(monthId);
-  const [expenses, income] = await Promise.all([
-    getExpenseLines(monthId),
-    getIncomeLines(monthId)
-  ]);
-  return { expenses, income };
+  return { expenses: await getExpenseLines(monthId) };
 }
 
 export async function updateBudgetLine(id, payload) {

@@ -14,6 +14,10 @@ export async function createExpenseTransaction(req, res) {
   res.status(201).json(await transactionService.createExpenseTransaction(req.body));
 }
 
+export async function createExpenseTransactions(req, res) {
+  res.status(201).json(await transactionService.createExpenseTransactions(req.body.transactions));
+}
+
 export async function updateExpenseTransaction(req, res) {
   res.json(await transactionService.updateExpenseTransaction(requireInteger(req.params.id, 'id'), req.body));
 }
