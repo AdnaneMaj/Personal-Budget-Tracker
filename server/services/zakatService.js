@@ -9,7 +9,8 @@ const SILVER_GRAMS = 595;
 const HAUL_DAYS = 354;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TROY_OUNCE_GRAMS = 31.1034768;
-const INITIAL_ANCHOR_DATE = '2026-07-01';
+const INITIAL_GOLD_ANCHOR_DATE = '2026-07-01';
+const INITIAL_SILVER_ANCHOR_DATE = '2025-10-01';
 const LOCAL_TIME_ZONE = 'Africa/Casablanca';
 const GOLDAPI_SOURCE = 'goldapi';
 let schedulerStarted = false;
@@ -57,10 +58,10 @@ function priceRow(row) {
 async function ensureSettings() {
   const { rows } = await query(
     `INSERT INTO zakat_settings (id, gold_anchor_date, silver_anchor_date)
-     VALUES (1, DATE '2026-07-01', DATE '2026-07-01')
+     VALUES (1, DATE '2026-07-01', DATE '2025-10-01')
      ON CONFLICT (id) DO UPDATE
      SET gold_anchor_date = DATE '2026-07-01',
-         silver_anchor_date = DATE '2026-07-01',
+         silver_anchor_date = DATE '2025-10-01',
          updated_at = now()
      RETURNING id`
   );
@@ -71,8 +72,8 @@ async function getSettings() {
   await ensureSettings();
   return {
     id: 1,
-    gold_anchor_date: INITIAL_ANCHOR_DATE,
-    silver_anchor_date: INITIAL_ANCHOR_DATE
+    gold_anchor_date: INITIAL_GOLD_ANCHOR_DATE,
+    silver_anchor_date: INITIAL_SILVER_ANCHOR_DATE
   };
 }
 

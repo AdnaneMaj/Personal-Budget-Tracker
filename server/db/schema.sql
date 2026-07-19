@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS receivables (
 CREATE TABLE IF NOT EXISTS zakat_settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   gold_anchor_date DATE NOT NULL DEFAULT DATE '2026-07-01',
-  silver_anchor_date DATE NOT NULL DEFAULT DATE '2026-07-01',
+  silver_anchor_date DATE NOT NULL DEFAULT DATE '2025-10-01',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -153,11 +153,11 @@ VALUES
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO zakat_settings (id, gold_anchor_date, silver_anchor_date)
-VALUES (1, DATE '2026-07-01', DATE '2026-07-01')
+VALUES (1, DATE '2026-07-01', DATE '2025-10-01')
 ON CONFLICT (id) DO NOTHING;
 
 UPDATE zakat_settings
 SET gold_anchor_date = DATE '2026-07-01',
-    silver_anchor_date = DATE '2026-07-01',
+    silver_anchor_date = DATE '2025-10-01',
     updated_at = now()
 WHERE id = 1;
