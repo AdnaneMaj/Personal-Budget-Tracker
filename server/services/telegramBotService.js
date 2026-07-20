@@ -35,6 +35,12 @@ function draftTotal(items) {
   return items.reduce((total, item) => total + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 }
 
+function treatmentLabel(item) {
+  return item.budget_treatment === 'spread'
+    ? `Spread / ${item.spread_months} mo`
+    : 'Normal';
+}
+
 async function telegram(method, payload) {
   const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {
     method: 'POST',
@@ -89,7 +95,7 @@ function formatDraft(draft) {
     const unitPrice = Number(item.unit_price || 0);
     const total = quantity * unitPrice;
     const category = item.category_name || 'No category';
-    return `${index + 1}. <b>${escapeHtml(item.product_name)}</b> x${quantity} · ${money(unitPrice)}/unit · ${money(total)} · ${escapeHtml(category)}`;
+    return `${index + 1}. <b>${escapeHtml(item.product_name)}</b> x${quantity} · ${money(unitPrice)}/unit · ${money(total)} · ${escapeHtml(category)} · ${treatmentLabel(item)}`;
   });
   const warnings = draft.warnings?.length
     ? `\n\nWarnings:\n${draft.warnings.map((warning) => `- ${escapeHtml(warning)}`).join('\n')}`
@@ -105,7 +111,9 @@ function formatDraft(draft) {
     '<code>set 1 name bread</code>',
     '<code>set 2 qty 3</code>',
     '<code>set 2 unit 5</code>',
-    '<code>set 3 category transport</code>'
+    '<code>set 3 category transport</code>',
+    '<code>set 1 spread 24</code>',
+    '<code>set 1 normal</code>'
   ].filter(Boolean).join('\n');
 }
 
@@ -151,12 +159,17 @@ async function createDraft(chatId, text) {
     warnings: parsed.warnings || [],
     createdAt: Date.now()
   };
+  draft.items = draft.items.map((item) => ({
+    ...item,
+    budget_treatment: item.budget_treatment || 'normal',
+    spread_months: item.spread_months || null
+  }));
   pendingDrafts.set(draftKey(chatId, draft.id), draft);
   await sendMessage(chatId, formatDraft(draft), { reply_markup: draftKeyboard(draft) });
 }
 
 async function updateDraft(chatId, text) {
-  const match = text.match(/^set\s+(\d+)\s+(name|product|qty|quantity|unit|price|category)\s+(.+)$/i);
+  const match = text.match(/^set\s+(\d+)\s+(name|product|qty|quantity|unit|price|category|spread|normal)(?:\s+(.+))?$/i);
   if (!match) return false;
 
   const draft = latestDraftFor(chatId);
@@ -167,7 +180,7 @@ async function updateDraft(chatId, text) {
 
   const index = Number(match[1]) - 1;
   const field = match[2].toLowerCase();
-  const value = match[3].trim();
+  const value = String(match[3] || '').trim();
   const item = draft.items[index];
   if (!item) {
     await sendMessage(chatId, `Draft item ${index + 1} does not exist.`);
@@ -175,6 +188,10 @@ async function updateDraft(chatId, text) {
   }
 
   if (field === 'name' || field === 'product') {
+    if (!value) {
+      await sendMessage(chatId, 'Name cannot be empty.');
+      return true;
+    }
     item.product_name = value;
   } else if (field === 'qty' || field === 'quantity') {
     const quantity = Number(value.replace(',', '.'));
@@ -199,6 +216,17 @@ async function updateDraft(chatId, text) {
     }
     item.category_id = category.id;
     item.category_name = category.name;
+  } else if (field === 'spread') {
+    const months = Number(value);
+    if (!Number.isInteger(months) || months <= 0) {
+      await sendMessage(chatId, 'Spread period must be a positive whole number of months.');
+      return true;
+    }
+    item.budget_treatment = 'spread';
+    item.spread_months = months;
+  } else if (field === 'normal') {
+    item.budget_treatment = 'normal';
+    item.spread_months = null;
   }
 
   await sendMessage(chatId, formatDraft(draft), { reply_markup: draftKeyboard(draft) });
@@ -228,7 +256,9 @@ async function confirmDraft(chatId, draftId, messageId) {
     quantity: item.quantity || 1,
     unit_price: item.unit_price,
     price: Number(item.quantity || 1) * Number(item.unit_price || 0),
-    category_id: item.category_id
+    category_id: item.category_id,
+    budget_treatment: item.budget_treatment || 'normal',
+    spread_months: item.budget_treatment === 'spread' ? item.spread_months : null
   })));
 
   pendingDrafts.delete(key);
@@ -258,7 +288,8 @@ async function handleMessage(message) {
       '',
       'Then confirm, cancel, or edit with:',
       '<code>set 1 category food</code>',
-      '<code>set 2 unit 45</code>'
+      '<code>set 2 unit 45</code>',
+      '<code>set 1 spread 24</code>'
     ].join('\n'));
     return;
   }

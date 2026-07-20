@@ -2,6 +2,7 @@ import { pool, query } from '../db/pool.js';
 import { HttpError } from '../utils/http.js';
 import { lineMetrics } from '../utils/money.js';
 import { ensureBudgetLines } from './monthService.js';
+import { budgetImpactCte } from './expenseBudgetImpact.js';
 
 async function ensureLinesForMonth(monthId) {
   const client = await pool.connect();
@@ -19,7 +20,8 @@ async function ensureLinesForMonth(monthId) {
 
 async function getExpenseLines(monthId) {
   const { rows } = await query(
-    `SELECT bl.id,
+    `${budgetImpactCte}
+     SELECT bl.id,
             bl.month_id,
             bl.category_id,
             bl.category_type,
@@ -33,9 +35,8 @@ async function getExpenseLines(monthId) {
      FROM budget_lines bl
      JOIN expense_categories c ON c.id = bl.category_id
      LEFT JOIN (
-       SELECT category_id, SUM(price) AS actual_amount
-       FROM expense_transactions
-       WHERE month_id = $1
+       SELECT category_id, SUM(amount) AS actual_amount
+       FROM budget_impacts
        GROUP BY category_id
      ) actuals ON actuals.category_id = bl.category_id
      WHERE bl.month_id = $1 AND bl.category_type = 'expense'

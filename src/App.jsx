@@ -27,7 +27,8 @@ import {
   TrendingDown,
   TrendingUp,
   Trash2,
-  WalletCards
+  WalletCards,
+  X
 } from 'lucide-react';
 import { api, dateOnly, money, monthLabel, todayISO } from './api.js';
 import './styles.css';
@@ -367,10 +368,13 @@ function OverviewPage({ month, currency }) {
   const TrendIcon = projectedDelta >= 0 ? TrendingDown : TrendingUp;
   const paceStatus = expensePct <= monthElapsedPct ? 'positive' : 'negative';
   const spentDisplay = money(data.totals.actual_expenses, currency).replace(` ${currency}`, '');
+  const realSpending = Number(data.totals.cash_expenses || 0);
   const progressPct = Math.min(Math.max(expensePct, 0), 100);
   const paceMarkerPct = Math.min(Math.max(monthElapsedPct, 0), 100);
   const dailyRunRate = elapsedDays > 0 ? data.totals.actual_expenses / elapsedDays : 0;
   const categoryTotal = data.spendingByCategory.reduce((total, row) => total + Number(row.planned_amount || 0), 0);
+  const spreadExpenses = data.activeSpreadExpenses || [];
+  const spreadMonthlyTotal = spreadExpenses.reduce((total, row) => total + Number(row.monthly_amount || 0), 0);
   const categorySegments = data.spendingByCategory.flatMap((row) => {
     const planned = Number(row.planned_amount || 0);
     const actual = Number(row.actual_amount || 0);
@@ -409,6 +413,7 @@ function OverviewPage({ month, currency }) {
               {spentDisplay}
               <span> / {money(data.totals.planned_expenses, currency)}</span>
             </strong>
+            <p className="budget-pace">Real month spending: {money(realSpending, currency)}</p>
           </div>
           <div className="safe-spend">
             <span>Safe to spend today</span>
@@ -504,6 +509,28 @@ function OverviewPage({ month, currency }) {
             <div key={row.category_name} className="stack-row danger">
               <span>{row.category_name}</span>
               <strong className="num">{money(row.over_amount, currency)}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Spread expenses</h2>
+          {spreadMonthlyTotal > 0 && <span className="num">{money(spreadMonthlyTotal, currency)}/mo</span>}
+        </div>
+        <div className="stack-list">
+          {spreadExpenses.length === 0 && <p className="empty-state">No active spread expenses this month.</p>}
+          {spreadExpenses.map((row) => (
+            <div key={row.id} className="stack-row">
+              <span>
+                {row.description}
+                <br />
+                <small>
+                  {dateOnly(row.date)} · {row.category_name} · {money(row.price, currency)} total · month {row.spread_month_number} of {row.spread_months} · {row.months_remaining} left
+                </small>
+              </span>
+              <strong className="num">{money(row.monthly_amount, currency)}/mo</strong>
             </div>
           ))}
         </div>
@@ -1025,6 +1052,8 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
         unitPrice: String(item.unit_price || ''),
         amount: multiplyAmount(item.quantity || 1, item.unit_price || ''),
         category_id: item.category_id ? String(item.category_id) : '',
+        budgetTreatment: 'normal',
+        spreadMonths: '12',
         confidence: Number(item.confidence || 0)
       })));
     } catch (err) {
@@ -1061,10 +1090,11 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
         && Number(draft.amount) >= 0
         && Number(draft.quantity) > 0
         && Number(draft.unitPrice) >= 0
+        && (draft.budgetTreatment !== 'spread' || Number.isInteger(Number(draft.spreadMonths)) && Number(draft.spreadMonths) > 0)
         && draft.category_id
     );
     if (validDrafts.length !== drafts.length || validDrafts.length === 0) {
-      setError('Review every draft row before saving. Product name, quantity, unit price, amount, and category are required.');
+      setError('Review every draft row before saving. Product name, quantity, unit price, amount, category, and spread period are required.');
       return;
     }
 
@@ -1081,7 +1111,9 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
             quantity: draft.quantity,
             unit_price: draft.unitPrice,
             price: draft.amount,
-            category_id: Number(draft.category_id)
+            category_id: Number(draft.category_id),
+            budget_treatment: draft.budgetTreatment,
+            spread_months: draft.budgetTreatment === 'spread' ? Number(draft.spreadMonths) : null
           }))
         })
       });
@@ -1143,6 +1175,7 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
                   <th>Unit price</th>
                   <th>Amount</th>
                   <th>Category</th>
+                  <th>Treatment</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -1176,6 +1209,22 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
                       </select>
                     </td>
                     <td>
+                      <select value={draft.budgetTreatment} onChange={(event) => updateDraft(draft.id, { budgetTreatment: event.target.value })}>
+                        <option value="normal">Normal</option>
+                        <option value="spread">Spread expense</option>
+                      </select>
+                      {draft.budgetTreatment === 'spread' && (
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={draft.spreadMonths}
+                          title="Spread period in months"
+                          onChange={(event) => updateDraft(draft.id, { spreadMonths: event.target.value })}
+                        />
+                      )}
+                    </td>
+                    <td>
                       <span className={draft.confidence >= 0.75 ? 'draft-status confident' : 'draft-status'}>
                         {draft.confidence >= 0.75 ? 'Ready' : 'Check'}
                       </span>
@@ -1204,7 +1253,9 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
     quantity: '1',
     unitPrice: '',
     amount: '',
-    category_id: categories[0]?.id || ''
+    category_id: categories[0]?.id || '',
+    budgetTreatment: 'normal',
+    spreadMonths: '12'
   });
 
   function updateFormCost(patch) {
@@ -1231,7 +1282,9 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
           quantity: form.quantity || 1,
           unit_price: form.unitPrice || divideAmount(form.amount, form.quantity || 1),
           price: form.amount,
-          category_id: Number(form.category_id)
+          category_id: Number(form.category_id),
+          budget_treatment: form.budgetTreatment,
+          spread_months: form.budgetTreatment === 'spread' ? Number(form.spreadMonths) : null
         }
       : {
           month_id: month.id,
@@ -1289,6 +1342,23 @@ function AddTransactionForm({ isExpense, categories, month, onDone }) {
           </option>
         ))}
       </select>
+      {isExpense && (
+        <select value={form.budgetTreatment} onChange={(event) => setForm({ ...form, budgetTreatment: event.target.value })}>
+          <option value="normal">Normal</option>
+          <option value="spread">Spread expense</option>
+        </select>
+      )}
+      {isExpense && form.budgetTreatment === 'spread' && (
+        <input
+          type="number"
+          min="1"
+          step="1"
+          value={form.spreadMonths}
+          placeholder="Months"
+          title="Spread period in months"
+          onChange={(event) => setForm({ ...form, spreadMonths: event.target.value })}
+        />
+      )}
       <button className="primary" onClick={submit}>
         Save
       </button>
@@ -1321,7 +1391,9 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
           quantity: editing.quantity,
           unit_price: editing.unitPrice,
           price: editing.amount,
-          category_id: Number(editing.category_id)
+          category_id: Number(editing.category_id),
+          budget_treatment: editing.budgetTreatment,
+          spread_months: editing.budgetTreatment === 'spread' ? Number(editing.spreadMonths) : null
         }
       : {
           entry_date: editing.date,
@@ -1351,6 +1423,7 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
             {isExpense && <th><button onClick={() => flipSort('unit_price')}>Unit</button></th>}
             <th><button onClick={() => flipSort(isExpense ? 'price' : 'amount')}>Amount</button></th>
             <th><button onClick={() => flipSort('category')}>Category</button></th>
+            {isExpense && <th>Treatment</th>}
             <th></th>
           </tr>
         </thead>
@@ -1361,6 +1434,8 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
 	            const rowQuantity = isExpense ? row.quantity : null;
 	            const rowUnitPrice = isExpense ? row.unit_price : null;
 	            const rowAmount = isExpense ? row.price : row.amount;
+	            const rowBudgetTreatment = isExpense ? row.budget_treatment : null;
+	            const rowSpreadMonths = isExpense ? row.spread_months : null;
             const isEditing = editing?.id === row.id;
             return (
               <tr key={row.id} className={isEditing ? 'editing' : ''}>
@@ -1404,11 +1479,42 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
                     </select>
                   ) : row.category_name}
                 </td>
+                {isExpense && (
+                  <td>
+                    {isEditing ? (
+                      <>
+                        <select value={editing.budgetTreatment} onChange={(event) => setEditing({ ...editing, budgetTreatment: event.target.value })}>
+                          <option value="normal">Normal</option>
+                          <option value="spread">Spread expense</option>
+                        </select>
+                        {editing.budgetTreatment === 'spread' && (
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={editing.spreadMonths}
+                            title="Spread period in months"
+                            onChange={(event) => setEditing({ ...editing, spreadMonths: event.target.value })}
+                          />
+                        )}
+                      </>
+                    ) : rowBudgetTreatment === 'spread' ? (
+                      `Spread / ${rowSpreadMonths} mo`
+                    ) : (
+                      'Normal'
+                    )}
+                  </td>
+                )}
                 <td className="row-actions">
                   {isEditing ? (
-                    <button className="icon-button primary" title="Save" onClick={saveEdit}>
-                      <Save size={15} />
-                    </button>
+                    <>
+                      <button className="icon-button primary" title="Save" onClick={saveEdit}>
+                        <Save size={15} />
+                      </button>
+                      <button className="icon-button" title="Cancel edit" onClick={() => setEditing(null)}>
+                        <X size={15} />
+                      </button>
+                    </>
                   ) : (
                     <button
                       className="row-edit"
@@ -1420,7 +1526,9 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
                           quantity: rowQuantity,
                           unitPrice: rowUnitPrice ?? divideAmount(rowAmount, rowQuantity || 1),
                           amount: rowAmount,
-                          category_id: row.category_id
+                          category_id: row.category_id,
+                          budgetTreatment: rowBudgetTreatment || 'normal',
+                          spreadMonths: rowSpreadMonths || '12'
                         })
                       }
                     >
@@ -1601,9 +1709,14 @@ function ReceivablesPage({ month, currency }) {
                     </td>
                     <td className="row-actions">
                       {isEditing ? (
-                        <button className="icon-button primary" title="Save" onClick={saveEdit}>
-                          <Save size={15} />
-                        </button>
+                        <>
+                          <button className="icon-button primary" title="Save" onClick={saveEdit}>
+                            <Save size={15} />
+                          </button>
+                          <button className="icon-button" title="Cancel edit" onClick={() => setEditing(null)}>
+                            <X size={15} />
+                          </button>
+                        </>
                       ) : (
                         <button
                           className="row-edit"

@@ -38,12 +38,38 @@ function quantityValue(value) {
   return quantity;
 }
 
+function spreadMonthsValue(value) {
+  const months = Number(value);
+  if (!Number.isInteger(months) || months <= 0) {
+    throw new HttpError(400, 'spread_months must be a positive whole number');
+  }
+  return months;
+}
+
+function budgetTreatmentFields(payload, current = {}) {
+  const treatment = payload.budget_treatment ?? current.budget_treatment ?? 'normal';
+  if (!['normal', 'spread'].includes(treatment)) {
+    throw new HttpError(400, 'budget_treatment must be normal or spread');
+  }
+
+  if (treatment === 'normal') {
+    return { budgetTreatment: 'normal', spreadMonths: null };
+  }
+
+  const sourceMonths = payload.spread_months ?? current.spread_months;
+  return {
+    budgetTreatment: 'spread',
+    spreadMonths: spreadMonthsValue(sourceMonths)
+  };
+}
+
 function expenseRow(row) {
   return {
     ...row,
     quantity: Number(row.quantity),
     unit_price: row.unit_price === null ? null : Number(row.unit_price),
-    price: Number(row.price)
+    price: Number(row.price),
+    spread_months: row.spread_months === null ? null : Number(row.spread_months)
   };
 }
 
@@ -56,6 +82,7 @@ function expenseFields(payload) {
   const hasUnitPrice = payload.unit_price !== undefined && payload.unit_price !== null && payload.unit_price !== '';
   const price = hasPrice ? amountValue(payload.price, 'price') : amountValue(Number(payload.unit_price) * quantity, 'price');
   const unitPrice = hasUnitPrice ? amountValue(payload.unit_price, 'unit_price') : (quantity > 0 ? price / quantity : price);
+  const { budgetTreatment, spreadMonths } = budgetTreatmentFields(payload);
   return [
     payload.month_id,
     payload.transaction_date,
@@ -63,13 +90,16 @@ function expenseFields(payload) {
     quantity,
     unitPrice,
     price,
-    payload.category_id
+    payload.category_id,
+    budgetTreatment,
+    spreadMonths
   ];
 }
 
-const insertExpenseSql = `INSERT INTO expense_transactions (month_id, transaction_date, description, quantity, unit_price, price, category_id)
-  VALUES ($1, $2, $3, $4, $5, $6, $7)
-  RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id`;
+const insertExpenseSql = `INSERT INTO expense_transactions
+    (month_id, transaction_date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months`;
 
 export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'date', sortDir = 'desc' }) {
   const params = [monthId];
@@ -89,6 +119,8 @@ export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'd
             t.unit_price,
             t.price,
             t.category_id,
+            t.budget_treatment,
+            t.spread_months,
             c.name AS category_name
      FROM expense_transactions t
      JOIN expense_categories c ON c.id = t.category_id
@@ -134,9 +166,18 @@ export async function createExpenseTransactions(payloads) {
 }
 
 export async function updateExpenseTransaction(id, payload) {
+  const currentResult = await query(
+    `SELECT budget_treatment, spread_months
+     FROM expense_transactions
+     WHERE id = $1`,
+    [id]
+  );
+  if (!currentResult.rows[0]) throw new HttpError(404, 'expense transaction not found');
+
   const quantity = payload.quantity === undefined ? null : quantityValue(payload.quantity);
   const unitPrice = payload.unit_price === undefined ? null : amountValue(payload.unit_price, 'unit_price');
   const price = payload.price === undefined ? null : amountValue(payload.price, 'price');
+  const { budgetTreatment, spreadMonths } = budgetTreatmentFields(payload, currentResult.rows[0]);
   const { rows } = await query(
     `UPDATE expense_transactions
      SET transaction_date = COALESCE($1, transaction_date),
@@ -145,9 +186,11 @@ export async function updateExpenseTransaction(id, payload) {
          unit_price = COALESCE($4, unit_price),
          price = COALESCE($5, price),
          category_id = COALESCE($6, category_id),
+         budget_treatment = $7,
+         spread_months = $8,
          updated_at = now()
-     WHERE id = $7
-     RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id`,
+     WHERE id = $9
+     RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months`,
     [
       payload.transaction_date || null,
       payload.description ? String(payload.description).trim() : null,
@@ -155,6 +198,8 @@ export async function updateExpenseTransaction(id, payload) {
       unitPrice,
       price,
       payload.category_id || null,
+      budgetTreatment,
+      spreadMonths,
       id
     ]
   );

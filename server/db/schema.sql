@@ -45,9 +45,16 @@ CREATE TABLE IF NOT EXISTS expense_transactions (
   quantity NUMERIC(10, 2) NOT NULL DEFAULT 1 CHECK (quantity > 0),
   unit_price NUMERIC(12, 2) CHECK (unit_price >= 0),
   price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
+  budget_treatment TEXT NOT NULL DEFAULT 'normal' CHECK (budget_treatment IN ('normal', 'spread')),
+  spread_months INTEGER CHECK (spread_months IS NULL OR spread_months > 0),
   category_id INTEGER NOT NULL REFERENCES expense_categories(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (
+    (budget_treatment = 'normal' AND spread_months IS NULL)
+    OR
+    (budget_treatment = 'spread' AND spread_months IS NOT NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS income_entries (
@@ -120,6 +127,41 @@ ALTER TABLE expense_transactions
 
 ALTER TABLE expense_transactions
   ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12, 2) CHECK (unit_price >= 0);
+
+ALTER TABLE expense_transactions
+  ADD COLUMN IF NOT EXISTS budget_treatment TEXT NOT NULL DEFAULT 'normal';
+
+ALTER TABLE expense_transactions
+  ADD COLUMN IF NOT EXISTS spread_months INTEGER;
+
+ALTER TABLE expense_transactions
+  DROP CONSTRAINT IF EXISTS expense_transactions_budget_treatment_check;
+
+ALTER TABLE expense_transactions
+  ADD CONSTRAINT expense_transactions_budget_treatment_check
+  CHECK (budget_treatment IN ('normal', 'spread'));
+
+ALTER TABLE expense_transactions
+  DROP CONSTRAINT IF EXISTS expense_transactions_spread_months_check;
+
+ALTER TABLE expense_transactions
+  ADD CONSTRAINT expense_transactions_spread_months_check
+  CHECK (spread_months IS NULL OR spread_months > 0);
+
+UPDATE expense_transactions
+SET spread_months = NULL
+WHERE budget_treatment = 'normal';
+
+ALTER TABLE expense_transactions
+  DROP CONSTRAINT IF EXISTS expense_transactions_budget_treatment_spread_check;
+
+ALTER TABLE expense_transactions
+  ADD CONSTRAINT expense_transactions_budget_treatment_spread_check
+  CHECK (
+    (budget_treatment = 'normal' AND spread_months IS NULL)
+    OR
+    (budget_treatment = 'spread' AND spread_months IS NOT NULL)
+  );
 
 ALTER TABLE zakat_price_entries
   ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
