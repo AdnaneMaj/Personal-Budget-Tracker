@@ -24,7 +24,7 @@ Clone the repo:
 
 ```bash
 git clone https://github.com/AdnaneMaj/Personal-Budget-Tracker.git
-cd Personal-Budget-Tracker.git
+cd Personal-Budget-Tracker
 ```
 
 Create your `.env` file:
