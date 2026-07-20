@@ -23,8 +23,8 @@ I wanted something simple that I can run myself, with the option to add expenses
 Clone the repo:
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+git clone https://github.com/AdnaneMaj/Personal-Budget-Tracker.git
+cd Personal-Budget-Tracker.git
 ```
 
 Create your `.env` file:
