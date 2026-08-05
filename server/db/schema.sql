@@ -70,7 +70,6 @@ CREATE TABLE IF NOT EXISTS income_entries (
 
 CREATE TABLE IF NOT EXISTS receivables (
   id SERIAL PRIMARY KEY,
-  month_id INTEGER NOT NULL REFERENCES months(id) ON DELETE CASCADE,
   person_name TEXT NOT NULL,
   description TEXT,
   amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
@@ -78,6 +77,10 @@ CREATE TABLE IF NOT EXISTS receivables (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Receivables are ongoing balances, not monthly records. This also migrates
+-- databases created before they were made global while preserving every row.
+ALTER TABLE receivables DROP COLUMN IF EXISTS month_id;
 
 CREATE TABLE IF NOT EXISTS zakat_settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -118,7 +121,7 @@ CREATE TABLE IF NOT EXISTS zakat_obligations (
 CREATE INDEX IF NOT EXISTS idx_budget_lines_month ON budget_lines(month_id);
 CREATE INDEX IF NOT EXISTS idx_expense_transactions_month_category ON expense_transactions(month_id, category_id);
 CREATE INDEX IF NOT EXISTS idx_income_entries_month_category ON income_entries(month_id, category_id);
-CREATE INDEX IF NOT EXISTS idx_receivables_month_status ON receivables(month_id, status);
+CREATE INDEX IF NOT EXISTS idx_receivables_status ON receivables(status);
 CREATE INDEX IF NOT EXISTS idx_zakat_price_entries_date ON zakat_price_entries(entry_date);
 CREATE INDEX IF NOT EXISTS idx_zakat_obligations_paid_due ON zakat_obligations(paid, due_date);
 

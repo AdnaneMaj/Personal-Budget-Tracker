@@ -21,28 +21,25 @@ function receivableRow(row) {
   return { ...row, amount: Number(row.amount) };
 }
 
-export async function listReceivables({ monthId }) {
+export async function listReceivables() {
   const { rows } = await query(
-    `SELECT id, month_id, person_name, description, amount, status, created_at
+    `SELECT id, person_name, description, amount, status, created_at
      FROM receivables
-     WHERE month_id = $1
-     ORDER BY CASE status WHEN 'not_yet' THEN 0 ELSE 1 END, created_at DESC, id DESC`,
-    [monthId]
+     ORDER BY CASE status WHEN 'not_yet' THEN 0 ELSE 1 END, created_at DESC, id DESC`
   );
   return rows.map(receivableRow);
 }
 
 export async function createReceivable(payload) {
-  if (!payload.month_id || !payload.person_name) {
-    throw new HttpError(400, 'month_id, person_name, and amount are required');
+  if (!payload.person_name) {
+    throw new HttpError(400, 'person_name and amount are required');
   }
 
   const { rows } = await query(
-    `INSERT INTO receivables (month_id, person_name, description, amount, status)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, month_id, person_name, description, amount, status, created_at`,
+    `INSERT INTO receivables (person_name, description, amount, status)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, person_name, description, amount, status, created_at`,
     [
-      payload.month_id,
       String(payload.person_name).trim(),
       payload.description ? String(payload.description).trim() : null,
       amountValue(payload.amount),
@@ -64,7 +61,7 @@ export async function updateReceivable(id, payload) {
          status = COALESCE($4, status),
          updated_at = now()
      WHERE id = $5
-     RETURNING id, month_id, person_name, description, amount, status, created_at`,
+     RETURNING id, person_name, description, amount, status, created_at`,
     [
       payload.person_name ? String(payload.person_name).trim() : null,
       payload.description === undefined ? null : String(payload.description || '').trim(),

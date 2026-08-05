@@ -2,9 +2,7 @@ import * as receivableService from '../services/receivableService.js';
 import { requireInteger } from '../utils/http.js';
 
 export async function listReceivables(req, res) {
-  res.json(await receivableService.listReceivables({
-    monthId: requireInteger(req.query.monthId, 'monthId')
-  }));
+  res.json(await receivableService.listReceivables());
 }
 
 export async function createReceivable(req, res) {

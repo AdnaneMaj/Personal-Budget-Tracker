@@ -1552,7 +1552,7 @@ function TransactionTable({ isExpense, rows, categories, currency, flipSort, onC
 /* Savings — leads with the number that actually matters.           */
 /* ---------------------------------------------------------------- */
 
-function ReceivablesPage({ month, currency }) {
+function ReceivablesPage({ currency }) {
   const [refresh, setRefresh] = useState(0);
   const [form, setForm] = useState({
     person_name: '',
@@ -1562,11 +1562,10 @@ function ReceivablesPage({ month, currency }) {
   });
   const [editing, setEditing] = useState(null);
   const state = useLoad(
-    () => (month ? api(`/receivables?${new URLSearchParams({ monthId: month.id })}`) : Promise.resolve(null)),
-    [month?.id, refresh]
+    () => api('/receivables'),
+    [refresh]
   );
 
-  if (!month) return <Panel>Select or create a month from the Months tab.</Panel>;
   if (state.loading) return <Panel>Loading receivables...</Panel>;
   if (state.error) return <Panel tone="error">{state.error}</Panel>;
   if (!state.data) return <Panel>Loading receivables...</Panel>;
@@ -1580,7 +1579,6 @@ function ReceivablesPage({ month, currency }) {
     await api('/receivables', {
       method: 'POST',
       body: JSON.stringify({
-        month_id: month.id,
         person_name: form.person_name,
         description: form.description,
         amount: form.amount,
@@ -1659,7 +1657,7 @@ function ReceivablesPage({ month, currency }) {
       </div>
 
       {rows.length === 0 ? (
-        <p className="empty-state">No receivables for this month.</p>
+        <p className="empty-state">No receivables yet.</p>
       ) : (
         <div className="table-wrap">
           <table>
