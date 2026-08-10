@@ -75,6 +75,43 @@ After changing `.env`, restart the app:
 docker compose restart app
 ```
 
+## Development and Self-Hosted Production
+
+Development runs Vite and the API separately with hot reload:
+
+```bash
+docker compose up -d
+```
+
+Production builds the React app, serves the UI and API from one port, and uses
+its own PostgreSQL volume. Copy `.env.production.example` to `.env.production`
+and replace the database password before the first deployment, then run:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The production app is available locally at `http://127.0.0.1:8080`. It is bound
+to localhost intentionally; Tailscale Serve can expose it privately:
+
+```powershell
+& 'C:\Program Files\Tailscale\tailscale.exe' serve --bg --http=8080 8080
+```
+
+Use the URL printed by Tailscale from another device in the same tailnet. After
+testing a new change in development, deploy it with the same production Compose
+command. Useful production commands:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f app
+docker compose -f docker-compose.prod.yml restart
+docker compose -f docker-compose.prod.yml down
+```
+
+Do not add `-v` to `down` unless you intentionally want to delete the production
+database volume.
+
 ## Optional AI Parsing
 
 If you add a Groq API key, the app can turn text like this:

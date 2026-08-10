@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+.env.production
 npm-debug.log*
 *.log
 app_spec.md
