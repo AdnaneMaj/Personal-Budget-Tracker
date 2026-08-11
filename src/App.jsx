@@ -449,7 +449,12 @@ function OverviewPage({ month, currency }) {
           <LineChart data={trend}>
             <CartesianGrid stroke="#ded6c4" vertical={false} />
             <XAxis dataKey="label" stroke="#6b6559" tick={axisTick} />
-            <YAxis stroke="#6b6559" tick={axisTick} />
+            <YAxis
+              stroke="#6b6559"
+              tick={axisTick}
+              domain={[0, Number(data.totals.planned_expenses)]}
+              allowDataOverflow
+            />
             <Tooltip content={<DailyExpenseTooltip currency={currency} />} />
             <Line type="monotone" dataKey="actual_expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} connectNulls={false} />
             <Line type="monotone" dataKey="forecast_expenses" stroke="#a8452f" strokeWidth={2.5} strokeDasharray="6 5" dot={false} connectNulls={false} />
