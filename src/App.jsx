@@ -1038,6 +1038,15 @@ function divideAmount(amount, quantity) {
   return (total / q).toFixed(2);
 }
 
+function draftMemoryStatus(draft) {
+  if (!draft.unitPrice) return { label: 'Price needed', ready: false };
+  if (draft.productMatch === 'suggested') return { label: 'Check match', ready: false };
+  if (draft.priceSource === 'remembered') return { label: 'Remembered', ready: true };
+  if (draft.priceSource === 'explicit') return { label: 'From text', ready: true };
+  if (draft.priceSource === 'user') return { label: draft.productId ? 'Updated' : 'New product', ready: true };
+  return { label: draft.productId ? 'Matched' : 'New product', ready: true };
+}
+
 function NaturalExpenseInput({ categories, month, currency, onDone }) {
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState([]);
@@ -1061,9 +1070,15 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
         id: `${Date.now()}-${index}`,
         date: todayISO(),
         productName: item.product_name || '',
+        productAlias: item.input_name || item.product_name || '',
+        productId: item.product_id || null,
+        productMatch: item.product_match || 'new',
         quantity: String(item.quantity || 1),
-        unitPrice: String(item.unit_price || ''),
-        amount: multiplyAmount(item.quantity || 1, item.unit_price || ''),
+        unitPrice: item.unit_price === null || item.unit_price === undefined ? '' : String(item.unit_price),
+        amount: item.unit_price === null || item.unit_price === undefined
+          ? ''
+          : multiplyAmount(item.quantity || 1, item.unit_price),
+        priceSource: item.price_source || 'missing',
         category_id: item.category_id ? String(item.category_id) : '',
         budgetTreatment: 'normal',
         spreadMonths: '12',
@@ -1080,14 +1095,33 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
     setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)));
   }
 
+  function updateDraftProduct(id, productName) {
+    setDrafts((current) => current.map((draft) => {
+      if (draft.id !== id) return draft;
+      const usedRememberedPrice = draft.priceSource === 'remembered';
+      return {
+        ...draft,
+        productName,
+        productAlias: productName,
+        productId: null,
+        productMatch: 'new',
+        unitPrice: usedRememberedPrice ? '' : draft.unitPrice,
+        amount: usedRememberedPrice ? '' : draft.amount,
+        priceSource: usedRememberedPrice ? 'missing' : draft.priceSource
+      };
+    }));
+  }
+
   function updateDraftCost(id, patch) {
     setDrafts((current) => current.map((draft) => {
       if (draft.id !== id) return draft;
       const next = { ...draft, ...patch };
       if (Object.prototype.hasOwnProperty.call(patch, 'amount')) {
         next.unitPrice = divideAmount(next.amount, next.quantity);
+        next.priceSource = 'user';
       } else {
         next.amount = multiplyAmount(next.quantity, next.unitPrice);
+        if (Object.prototype.hasOwnProperty.call(patch, 'unitPrice')) next.priceSource = 'user';
       }
       return next;
     }));
@@ -1100,6 +1134,8 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
   async function saveDrafts() {
     const validDrafts = drafts.filter((draft) =>
       draft.productName.trim()
+        && draft.amount !== ''
+        && draft.unitPrice !== ''
         && Number(draft.amount) >= 0
         && Number(draft.quantity) > 0
         && Number(draft.unitPrice) >= 0
@@ -1121,6 +1157,8 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
             month_id: month.id,
             transaction_date: draft.date,
             description: draft.productName,
+            product_id: draft.productId,
+            product_alias: draft.productAlias,
             quantity: draft.quantity,
             unit_price: draft.unitPrice,
             price: draft.amount,
@@ -1194,13 +1232,18 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
                 </tr>
               </thead>
               <tbody>
-                {drafts.map((draft) => (
+                {drafts.map((draft) => {
+                  const status = draftMemoryStatus(draft);
+                  return (
                   <tr key={draft.id}>
                     <td>
                       <input type="date" value={draft.date} onChange={(event) => updateDraft(draft.id, { date: event.target.value })} />
                     </td>
                     <td>
-                      <input value={draft.productName} onChange={(event) => updateDraft(draft.id, { productName: event.target.value })} />
+                      <input
+                        value={draft.productName}
+                        onChange={(event) => updateDraftProduct(draft.id, event.target.value)}
+                      />
                     </td>
                     <td>
                       <input type="number" min="0.01" step="0.01" value={draft.quantity} onChange={(event) => updateDraftCost(draft.id, { quantity: event.target.value })} />
@@ -1238,8 +1281,8 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
                       )}
                     </td>
                     <td>
-                      <span className={draft.confidence >= 0.75 ? 'draft-status confident' : 'draft-status'}>
-                        {draft.confidence >= 0.75 ? 'Ready' : 'Check'}
+                      <span className={status.ready ? 'draft-status confident' : 'draft-status'}>
+                        {status.label}
                       </span>
                     </td>
                     <td>
@@ -1248,7 +1291,8 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

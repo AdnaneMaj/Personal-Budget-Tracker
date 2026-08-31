@@ -1,5 +1,6 @@
 import { pool, query } from '../db/pool.js';
 import { HttpError } from '../utils/http.js';
+import { learnProduct } from './productMemoryService.js';
 
 const expenseSort = {
   date: 't.transaction_date',
@@ -69,6 +70,7 @@ function expenseRow(row) {
     quantity: Number(row.quantity),
     unit_price: row.unit_price === null ? null : Number(row.unit_price),
     price: Number(row.price),
+    product_id: row.product_id === null || row.product_id === undefined ? null : Number(row.product_id),
     spread_months: row.spread_months === null ? null : Number(row.spread_months)
   };
 }
@@ -97,9 +99,22 @@ function expenseFields(payload) {
 }
 
 const insertExpenseSql = `INSERT INTO expense_transactions
-    (month_id, transaction_date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-  RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months`;
+    (month_id, transaction_date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months, product_id)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+  RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, product_id, budget_treatment, spread_months`;
+
+async function createExpenseWithClient(client, payload) {
+  const fields = expenseFields(payload);
+  const product = await learnProduct(client, {
+    product_id: payload.product_id,
+    product_alias: payload.product_alias,
+    description: fields[2],
+    unit_price: fields[4],
+    category_id: fields[6]
+  });
+  const { rows } = await client.query(insertExpenseSql, [...fields, product?.id || null]);
+  return expenseRow(rows[0]);
+}
 
 export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'date', sortDir = 'desc' }) {
   const params = [monthId];
@@ -119,6 +134,7 @@ export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'd
             t.unit_price,
             t.price,
             t.category_id,
+            t.product_id,
             t.budget_treatment,
             t.spread_months,
             c.name AS category_name
@@ -132,11 +148,18 @@ export async function listExpenseTransactions({ monthId, categoryId, sortBy = 'd
 }
 
 export async function createExpenseTransaction(payload) {
-  const { rows } = await query(
-    insertExpenseSql,
-    expenseFields(payload)
-  );
-  return expenseRow(rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const created = await createExpenseWithClient(client, payload);
+    await client.query('COMMIT');
+    return created;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createExpenseTransactions(payloads) {
@@ -152,8 +175,7 @@ export async function createExpenseTransactions(payloads) {
     await client.query('BEGIN');
     const created = [];
     for (const payload of payloads) {
-      const { rows } = await client.query(insertExpenseSql, expenseFields(payload));
-      created.push(expenseRow(rows[0]));
+      created.push(await createExpenseWithClient(client, payload));
     }
     await client.query('COMMIT');
     return created;
@@ -166,45 +188,71 @@ export async function createExpenseTransactions(payloads) {
 }
 
 export async function updateExpenseTransaction(id, payload) {
-  const currentResult = await query(
-    `SELECT budget_treatment, spread_months
-     FROM expense_transactions
-     WHERE id = $1`,
-    [id]
-  );
-  if (!currentResult.rows[0]) throw new HttpError(404, 'expense transaction not found');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const currentResult = await client.query(
+      `SELECT budget_treatment, spread_months, product_id
+       FROM expense_transactions
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+    if (!currentResult.rows[0]) throw new HttpError(404, 'expense transaction not found');
 
-  const quantity = payload.quantity === undefined ? null : quantityValue(payload.quantity);
-  const unitPrice = payload.unit_price === undefined ? null : amountValue(payload.unit_price, 'unit_price');
-  const price = payload.price === undefined ? null : amountValue(payload.price, 'price');
-  const { budgetTreatment, spreadMonths } = budgetTreatmentFields(payload, currentResult.rows[0]);
-  const { rows } = await query(
-    `UPDATE expense_transactions
-     SET transaction_date = COALESCE($1, transaction_date),
-         description = COALESCE($2, description),
-         quantity = COALESCE($3, quantity),
-         unit_price = COALESCE($4, unit_price),
-         price = COALESCE($5, price),
-         category_id = COALESCE($6, category_id),
-         budget_treatment = $7,
-         spread_months = $8,
-         updated_at = now()
-     WHERE id = $9
-     RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, budget_treatment, spread_months`,
-    [
-      payload.transaction_date || null,
-      payload.description ? String(payload.description).trim() : null,
-      quantity,
-      unitPrice,
-      price,
-      payload.category_id || null,
-      budgetTreatment,
-      spreadMonths,
-      id
-    ]
-  );
-  if (!rows[0]) throw new HttpError(404, 'expense transaction not found');
-  return expenseRow(rows[0]);
+    const quantity = payload.quantity === undefined ? null : quantityValue(payload.quantity);
+    const unitPrice = payload.unit_price === undefined ? null : amountValue(payload.unit_price, 'unit_price');
+    const price = payload.price === undefined ? null : amountValue(payload.price, 'price');
+    const { budgetTreatment, spreadMonths } = budgetTreatmentFields(payload, currentResult.rows[0]);
+    const { rows } = await client.query(
+      `UPDATE expense_transactions
+       SET transaction_date = COALESCE($1, transaction_date),
+           description = COALESCE($2, description),
+           quantity = COALESCE($3, quantity),
+           unit_price = COALESCE($4, unit_price),
+           price = COALESCE($5, price),
+           category_id = COALESCE($6, category_id),
+           budget_treatment = $7,
+           spread_months = $8,
+           updated_at = now()
+       WHERE id = $9
+       RETURNING id, month_id, transaction_date AS date, description, quantity, unit_price, price, category_id, product_id, budget_treatment, spread_months`,
+      [
+        payload.transaction_date || null,
+        payload.description ? String(payload.description).trim() : null,
+        quantity,
+        unitPrice,
+        price,
+        payload.category_id || null,
+        budgetTreatment,
+        spreadMonths,
+        id
+      ]
+    );
+
+    const product = await learnProduct(client, {
+      product_id: currentResult.rows[0].product_id,
+      product_alias: payload.product_alias,
+      description: rows[0].description,
+      unit_price: rows[0].unit_price,
+      category_id: rows[0].category_id
+    });
+    await client.query(
+      `UPDATE expense_transactions
+       SET product_id = $1
+       WHERE id = $2`,
+      [product?.id || null, id]
+    );
+    rows[0].product_id = product?.id || null;
+
+    await client.query('COMMIT');
+    return expenseRow(rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function deleteExpenseTransaction(id) {

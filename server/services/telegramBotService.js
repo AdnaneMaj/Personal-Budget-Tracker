@@ -41,6 +41,14 @@ function treatmentLabel(item) {
     : 'Normal';
 }
 
+function memoryLabel(item) {
+  if (item.product_match === 'suggested') return 'check match';
+  if (item.price_source === 'remembered') return 'remembered';
+  if (item.price_source === 'explicit') return 'from text';
+  if (item.price_source === 'user') return 'edited';
+  return 'price needed';
+}
+
 async function telegram(method, payload) {
   const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {
     method: 'POST',
@@ -95,7 +103,7 @@ function formatDraft(draft) {
     const unitPrice = Number(item.unit_price || 0);
     const total = quantity * unitPrice;
     const category = item.category_name || 'No category';
-    return `${index + 1}. <b>${escapeHtml(item.product_name)}</b> x${quantity} · ${money(unitPrice)}/unit · ${money(total)} · ${escapeHtml(category)} · ${treatmentLabel(item)}`;
+    return `${index + 1}. <b>${escapeHtml(item.product_name)}</b> x${quantity} · ${money(unitPrice)}/unit (${memoryLabel(item)}) · ${money(total)} · ${escapeHtml(category)} · ${treatmentLabel(item)}`;
   });
   const warnings = draft.warnings?.length
     ? `\n\nWarnings:\n${draft.warnings.map((warning) => `- ${escapeHtml(warning)}`).join('\n')}`
@@ -147,7 +155,7 @@ async function currentMonth() {
 async function createDraft(chatId, text) {
   const parsed = await parseExpenseText({ text });
   if (!parsed.items.length) {
-    await sendMessage(chatId, 'I could not find any priced expense items in that message.');
+    await sendMessage(chatId, 'I could not find any expense items in that message.');
     return;
   }
 
@@ -192,7 +200,15 @@ async function updateDraft(chatId, text) {
       await sendMessage(chatId, 'Name cannot be empty.');
       return true;
     }
+    const usedRememberedPrice = item.price_source === 'remembered';
     item.product_name = value;
+    item.input_name = value;
+    item.product_id = null;
+    item.product_match = 'new';
+    if (usedRememberedPrice) {
+      item.unit_price = null;
+      item.price_source = 'missing';
+    }
   } else if (field === 'qty' || field === 'quantity') {
     const quantity = Number(value.replace(',', '.'));
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -207,6 +223,7 @@ async function updateDraft(chatId, text) {
       return true;
     }
     item.unit_price = unitPrice;
+    item.price_source = 'user';
   } else if (field === 'category') {
     const categories = await activeCategories();
     const category = categories.find((row) => row.name.toLowerCase() === value.toLowerCase());
@@ -241,7 +258,13 @@ async function confirmDraft(chatId, draftId, messageId) {
     return;
   }
 
-  const invalid = draft.items.filter((item) => !item.category_id || Number(item.unit_price) <= 0);
+  const invalid = draft.items.filter((item) =>
+    !item.category_id
+      || item.unit_price === null
+      || item.unit_price === undefined
+      || item.unit_price === ''
+      || Number(item.unit_price) < 0
+  );
   if (invalid.length) {
     await sendMessage(chatId, 'Some items are missing category or price. Edit the draft before confirming.');
     return;
@@ -253,6 +276,8 @@ async function confirmDraft(chatId, draftId, messageId) {
     month_id: month.id,
     transaction_date: date,
     description: item.product_name,
+    product_id: item.product_id,
+    product_alias: item.input_name,
     quantity: item.quantity || 1,
     unit_price: item.unit_price,
     price: Number(item.quantity || 1) * Number(item.unit_price || 0),

@@ -108,7 +108,16 @@ export async function deactivateCategory(type, id) {
       [id, type]
     );
 
-    if (usage.rows[0].count === 0 && budgetUsage.rows[0].count === 0) {
+    const productUsage = type === 'expense'
+      ? await client.query(
+          `SELECT COUNT(*)::int AS count
+           FROM products
+           WHERE category_id = $1`,
+          [id]
+        )
+      : { rows: [{ count: 0 }] };
+
+    if (usage.rows[0].count === 0 && budgetUsage.rows[0].count === 0 && productUsage.rows[0].count === 0) {
       await client.query(
         `DELETE FROM budget_lines
          WHERE category_id = $1

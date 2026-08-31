@@ -25,6 +25,24 @@ CREATE TABLE IF NOT EXISTS income_categories (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  canonical_name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL UNIQUE,
+  category_id INTEGER NOT NULL REFERENCES expense_categories(id),
+  unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS product_aliases (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  alias TEXT NOT NULL,
+  normalized_alias TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS budget_lines (
   id SERIAL PRIMARY KEY,
   month_id INTEGER NOT NULL REFERENCES months(id) ON DELETE CASCADE,
@@ -48,6 +66,7 @@ CREATE TABLE IF NOT EXISTS expense_transactions (
   budget_treatment TEXT NOT NULL DEFAULT 'normal' CHECK (budget_treatment IN ('normal', 'spread')),
   spread_months INTEGER CHECK (spread_months IS NULL OR spread_months > 0),
   category_id INTEGER NOT NULL REFERENCES expense_categories(id),
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (
@@ -118,8 +137,13 @@ CREATE TABLE IF NOT EXISTS zakat_obligations (
   UNIQUE (standard, due_date, cycle_anchor_date)
 );
 
+ALTER TABLE expense_transactions
+  ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_budget_lines_month ON budget_lines(month_id);
 CREATE INDEX IF NOT EXISTS idx_expense_transactions_month_category ON expense_transactions(month_id, category_id);
+CREATE INDEX IF NOT EXISTS idx_expense_transactions_product ON expense_transactions(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_aliases_product ON product_aliases(product_id);
 CREATE INDEX IF NOT EXISTS idx_income_entries_month_category ON income_entries(month_id, category_id);
 CREATE INDEX IF NOT EXISTS idx_receivables_status ON receivables(status);
 CREATE INDEX IF NOT EXISTS idx_zakat_price_entries_date ON zakat_price_entries(entry_date);
