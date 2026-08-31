@@ -372,6 +372,10 @@ function OverviewPage({ month, currency }) {
   const progressPct = Math.min(Math.max(expensePct, 0), 100);
   const paceMarkerPct = Math.min(Math.max(monthElapsedPct, 0), 100);
   const dailyRunRate = elapsedDays > 0 ? data.totals.actual_expenses / elapsedDays : 0;
+  const expenseChartCeiling = Math.max(
+    Number(data.totals.planned_expenses),
+    Number(data.totals.actual_expenses)
+  );
   const categoryTotal = data.spendingByCategory.reduce((total, row) => total + Number(row.planned_amount || 0), 0);
   const spreadExpenses = data.activeSpreadExpenses || [];
   const spreadMonthlyTotal = spreadExpenses.reduce((total, row) => total + Number(row.monthly_amount || 0), 0);
@@ -452,7 +456,8 @@ function OverviewPage({ month, currency }) {
             <YAxis
               stroke="#6b6559"
               tick={axisTick}
-              domain={[0, (dataMax) => Math.max(Number(data.totals.planned_expenses), dataMax)]}
+              domain={[0, expenseChartCeiling]}
+              allowDataOverflow
             />
             <Tooltip content={<DailyExpenseTooltip currency={currency} />} />
             <Line type="monotone" dataKey="actual_expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} connectNulls={false} />
