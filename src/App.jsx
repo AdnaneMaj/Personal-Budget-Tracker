@@ -43,6 +43,9 @@ const tabs = [
 ];
 
 const axisTick = { fontFamily: 'IBM Plex Mono', fontSize: 12, fill: '#6b6559' };
+const axisAmount = (value) => new Intl.NumberFormat('fr-MA', {
+  maximumFractionDigits: 2
+}).format(Number(value));
 const tooltipStyle = { fontFamily: 'IBM Plex Mono', border: '1px solid #c9bfa8', borderRadius: 3 };
 const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const RADIAN = Math.PI / 180;
@@ -456,6 +459,7 @@ function OverviewPage({ month, currency }) {
             <YAxis
               stroke="#6b6559"
               tick={axisTick}
+              tickFormatter={axisAmount}
               domain={[0, expenseChartCeiling]}
               allowDataOverflow
             />
