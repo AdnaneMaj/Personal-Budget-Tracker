@@ -452,8 +452,7 @@ function OverviewPage({ month, currency }) {
             <YAxis
               stroke="#6b6559"
               tick={axisTick}
-              domain={[0, Number(data.totals.planned_expenses)]}
-              allowDataOverflow
+              domain={[0, (dataMax) => Math.max(Number(data.totals.planned_expenses), dataMax)]}
             />
             <Tooltip content={<DailyExpenseTooltip currency={currency} />} />
             <Line type="monotone" dataKey="actual_expenses" stroke="#a8452f" strokeWidth={2.5} dot={false} connectNulls={false} />
