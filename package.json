@@ -10,7 +10,8 @@
     "start": "node server/index.js",
     "build": "vite build",
     "migrate": "node server/db/migrate.js",
-    "check": "node --check server/index.js"
+    "check": "node --check server/index.js",
+    "test": "node --test server/services/expenseParserService.test.js"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

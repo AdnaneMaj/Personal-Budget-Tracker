@@ -4,7 +4,7 @@
 
 This is a budget tracker I built to manage my personal expenses, monthly budget, savings, receivables, and zakat.
 
-I wanted something simple that I can run myself, with the option to add expenses manually, from natural language, or through Telegram. The app works without any AI or Telegram setup, so you can clone it and use the core budget tracker locally with Docker.
+I wanted something simple that I can run myself, with the option to add expenses manually or from natural language. The app works without any AI setup, so you can clone it and use the core budget tracker locally with Docker.
 
 ## What It Does
 
@@ -16,7 +16,6 @@ I wanted something simple that I can run myself, with the option to add expenses
 - Track zakat using gold and silver nisab
 - Mark large purchases as spread expenses so they do not distort one month
 - Optionally parse expenses with Groq AI
-- Optionally add expenses from Telegram
 
 ## Run The App
 
@@ -65,8 +64,6 @@ GROQ_MODEL=llama-3.3-70b-versatile
 
 GOLDAPI_KEY=
 
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_ALLOWED_CHAT_ID=
 ```
 
 After changing `.env`, restart the app:
@@ -122,6 +119,16 @@ If you add a Groq API key, the app can turn text like this:
 
 into editable expense rows before saving.
 
+Include a date in the text, for example `Yesterday I bought 5 eggs for 20dh`
+or `On 2026-10-12 coffee 15dh`. Dates are extracted separately for each item;
+missing or unclear dates stay blank and must be filled in before saving.
+Relative dates use the browser's time zone.
+If the AI service fails, a basic local draft is provided with a review warning.
+The local fallback supports ISO dates, day/month/year dates, and simple relative
+dates such as today, yesterday, and a number of days ago.
+
+Run parser regression tests with `npm test`.
+
 Set:
 
 ```env
@@ -130,31 +137,6 @@ GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 If you leave Groq empty, the app still works and uses a basic local parser.
-
-## Optional Telegram Bot
-
-Telegram is useful if you want to add expenses from your phone.
-
-1. Create a bot using `@BotFather`.
-2. Put the token in `.env`:
-
-```env
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-TELEGRAM_ALLOWED_CHAT_ID=
-```
-
-3. Restart the app.
-4. Send `/start` to your bot.
-5. The bot will reply with your chat ID.
-6. Put that chat ID in `.env`:
-
-```env
-TELEGRAM_ALLOWED_CHAT_ID=your_chat_id
-```
-
-7. Restart the app again.
-
-Only the configured chat ID can use the bot. If the Telegram token is empty, the bot is disabled.
 
 ## Optional Zakat Price Updates
 

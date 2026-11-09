@@ -1062,13 +1062,13 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
     try {
       const parsed = await api('/transactions/expenses/parse', {
         method: 'POST',
-        body: JSON.stringify({ month_id: month.id, text })
+        body: JSON.stringify({ month_id: month.id, text, time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone })
       });
       setProvider(parsed.provider || '');
       setWarnings(parsed.warnings || []);
       setDrafts((parsed.items || []).map((item, index) => ({
         id: `${Date.now()}-${index}`,
-        date: todayISO(),
+        date: item.transaction_date || '',
         productName: item.product_name || '',
         productAlias: item.input_name || item.product_name || '',
         productId: item.product_id || null,
@@ -1134,6 +1134,7 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
   async function saveDrafts() {
     const validDrafts = drafts.filter((draft) =>
       draft.productName.trim()
+        && draft.date
         && draft.amount !== ''
         && draft.unitPrice !== ''
         && Number(draft.amount) >= 0
@@ -1143,7 +1144,7 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
         && draft.category_id
     );
     if (validDrafts.length !== drafts.length || validDrafts.length === 0) {
-      setError('Review every draft row before saving. Product name, quantity, unit price, amount, category, and spread period are required.');
+      setError('Review every draft row before saving. Date, product name, quantity, unit price, amount, category, and spread period are required.');
       return;
     }
 
@@ -1185,7 +1186,7 @@ function NaturalExpenseInput({ categories, month, currency, onDone }) {
       <div className="natural-expense-input">
         <textarea
           value={text}
-          placeholder="Example: I bought 2 milks 4mad each, 1 chicken with 40dh, and took the bus with 4dh"
+          placeholder="Example: Yesterday I bought 2 milks 4mad each, 1 chicken with 40dh, and took the bus with 4dh"
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {

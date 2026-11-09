@@ -10,7 +10,5 @@ export const config = {
   groqApiKey: process.env.GROQ_API_KEY || '',
   groqModel: process.env.GROQ_MODEL || '',
   goldApiKey: process.env.GOLDAPI_KEY || '',
-  goldApiBaseUrl: process.env.GOLDAPI_BASE_URL || 'https://www.goldapi.io/api',
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
-  telegramAllowedChatId: process.env.TELEGRAM_ALLOWED_CHAT_ID || ''
+  goldApiBaseUrl: process.env.GOLDAPI_BASE_URL || 'https://www.goldapi.io/api'
 };

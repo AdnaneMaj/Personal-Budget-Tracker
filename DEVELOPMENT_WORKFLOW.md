@@ -54,6 +54,10 @@ Build new production images and recreate the production application with the tes
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+Use the production file on its own. Do not combine it with `docker-compose.yml`
+using multiple `-f` flags: the development image, startup command, bind mounts,
+and database credentials would carry over and break the production app.
+
 Production is available locally at:
 
 ```text
