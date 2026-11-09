@@ -1,4 +1,5 @@
-export const budgetImpactCte = `WITH selected_month AS (
+function buildBudgetImpactCte(selection) {
+  return `WITH selected_month AS (
   SELECT id,
          year,
          month,
@@ -6,10 +7,11 @@ export const budgetImpactCte = `WITH selected_month AS (
          (make_date(year, month, 1) + interval '1 month - 1 day')::date AS month_end,
          (year * 12 + month) AS month_ordinal
   FROM months
-  WHERE id = $1
+  ${selection}
 ),
 budget_impacts AS (
   SELECT t.id,
+         sm.id AS month_id,
          t.category_id,
          CASE
            WHEN t.budget_treatment = 'spread' THEN t.price / t.spread_months
@@ -34,3 +36,7 @@ budget_impacts AS (
     )
   )
 )`;
+}
+
+export const budgetImpactCte = buildBudgetImpactCte('WHERE id = $1');
+export const allMonthBudgetImpactCte = buildBudgetImpactCte('');

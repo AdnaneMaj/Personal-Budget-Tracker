@@ -1,5 +1,6 @@
 import { pool, query } from '../db/pool.js';
 import { HttpError } from '../utils/http.js';
+import { allMonthBudgetImpactCte } from './expenseBudgetImpact.js';
 
 function monthOrdinal(year, month) {
   return year * 12 + month;
@@ -28,12 +29,14 @@ export async function listMonths() {
 
 export async function listMonthSummaries() {
   const { rows } = await query(
-    `SELECT m.id,
+    `${allMonthBudgetImpactCte}
+     SELECT m.id,
             m.year,
             m.month,
             m.status,
             COALESCE(income.amount, 0) AS income_actual,
             COALESCE(expenses.amount, 0) AS expense_actual,
+            COALESCE(calculated_expenses.amount, 0) AS calculated_expenses,
             COALESCE(income.amount, 0) - COALESCE(expenses.amount, 0) AS savings,
             COALESCE(expenses.count, 0) AS expense_count,
             COALESCE(income.count, 0) AS income_count
@@ -48,12 +51,18 @@ export async function listMonthSummaries() {
        FROM expense_transactions
        GROUP BY month_id
      ) expenses ON expenses.month_id = m.id
+     LEFT JOIN (
+       SELECT month_id, SUM(amount) AS amount
+       FROM budget_impacts
+       GROUP BY month_id
+     ) calculated_expenses ON calculated_expenses.month_id = m.id
      ORDER BY m.year DESC, m.month DESC`
   );
   return rows.map((row) => ({
     ...row,
     income_actual: Number(row.income_actual),
     expense_actual: Number(row.expense_actual),
+    calculated_expenses: Number(row.calculated_expenses),
     savings: Number(row.savings),
     expense_count: Number(row.expense_count),
     income_count: Number(row.income_count)

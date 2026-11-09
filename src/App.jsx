@@ -711,8 +711,12 @@ function MonthManagerPage({
                             <strong className="num">{money(item.income_actual, currency)}</strong>
                           </span>
                           <span className="month-metric">
-                            <span>Out</span>
+                            <span title="Full amount of expenses recorded in this month">Real out</span>
                             <strong className="num">{money(item.expense_actual, currency)}</strong>
+                          </span>
+                          <span className="month-metric">
+                            <span title="Monthly spending with purchases spread across their selected months">Calculated out</span>
+                            <strong className="num">{money(item.calculated_expenses, currency)}</strong>
                           </span>
                           <span className={`month-metric ${savings >= 0 ? 'positive' : 'negative'}`}>
                             <span>Save</span>
