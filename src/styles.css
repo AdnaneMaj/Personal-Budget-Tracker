@@ -424,24 +424,6 @@ button:hover {
   display: grid;
   gap: 24px;
 }
-.overview-grid {
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-}
-.overview-grid > :is(.page-intro, .hero, .overview-lists) {
-  grid-column: 1 / -1;
-}
-.page-intro {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.page-intro h2 {
-  font-size: var(--text-xl);
-  letter-spacing: -0.045em;
-}
-.page-intro p {
-  color: var(--text-muted);
-}
 .eyebrow {
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -983,77 +965,9 @@ tr.editing :is(.row-edit, .row-delete) {
   font-weight: 400;
   margin-left: 8px;
 }
-.budget-hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-}
-.budget-pace {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  margin-top: 12px;
-}
-.safe-spend {
-  text-align: right;
-  flex-shrink: 0;
-  padding-left: 32px;
-  border-left: 1px solid var(--border);
-}
-.safe-spend strong {
-  color: var(--positive);
-}
-.safe-spend small {
-  margin-left: 4px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0;
-}
-.hero-compare {
-  display: grid;
-  gap: 16px;
-}
-.hero-compare .budget-pace {
-  margin-top: 0;
-}
-.pace-track {
-  position: relative;
-  height: 6px;
-  background: var(--surface-subtle);
-  border-radius: var(--radius-sm);
-}
-.pace-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--positive);
-  transition: width 0.35s;
-}
-.negative .pace-fill {
-  background: var(--negative);
-}
-.pace-marker {
-  position: absolute;
-  top: -4px;
-  height: 14px;
-  width: 2px;
-  background: var(--text-muted);
-  transform: translateX(-1px);
-}
-.budget-hero-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-.budget-hero-footer svg {
-  color: var(--accent);
-}
 .chart-panel {
   min-width: 0;
 }
-.chart-key,
 .chart-legend,
 .chart-legend span {
   display: inline-flex;
@@ -1061,51 +975,6 @@ tr.editing :is(.row-edit, .row-delete) {
   gap: 8px;
   color: var(--text-muted);
   font-size: var(--text-xs);
-}
-.chart-key i {
-  width: 16px;
-  height: 2px;
-  background: var(--accent);
-}
-.category-breakdown {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.9fr) minmax(140px, 1fr);
-  align-items: center;
-  gap: 16px;
-}
-.category-pie {
-  min-width: 0;
-}
-.category-legend {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 12px;
-}
-.category-legend li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-xs);
-}
-.category-legend li > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-  text-transform: capitalize;
-}
-.category-legend i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.category-legend strong {
-  font-weight: 500;
-  white-space: nowrap;
 }
 .chart-tooltip {
   min-width: 208px;
@@ -1163,54 +1032,8 @@ tr.editing :is(.row-edit, .row-delete) {
 .legend-line.expected {
   background: var(--warning);
 }
-.overview-lists {
-  display: grid;
-  grid-template-columns: 0.8fr 1.5fr 0.8fr;
-  gap: 32px;
-  padding-top: 8px;
-}
-.compact-list {
-  min-width: 0;
-}
-.compact-list .section-head {
-  margin-bottom: 8px;
-}
-.stack-list {
-  display: grid;
-}
-.stack-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--text-xs);
-}
-.stack-row:last-child {
-  border-bottom: 0;
-}
-.stack-row > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.stack-row > strong {
-  white-space: nowrap;
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-.stack-row small {
-  display: block;
-  margin-top: 4px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-.danger > strong,
-.flag-up {
+.danger > strong {
   color: var(--negative);
-}
-.flag-down {
-  color: var(--positive);
 }
 /* 07. PAGES: TRANSACTIONS & FORMS */
 .transactions-panel {
@@ -1802,27 +1625,6 @@ kbd {
   .month-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .category-breakdown {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  .category-pie .recharts-responsive-container {
-    max-height: 180px;
-  }
-  .category-legend {
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 16px;
-  }
-  .overview-lists {
-    grid-template-columns: 1fr 1.5fr;
-  }
-  .overview-lists > :last-child {
-    grid-column: 1 / -1;
-  }
-  .overview-lists > :last-child .stack-list {
-    grid-template-columns: 1fr 1fr;
-    column-gap: 32px;
-  }
 }
 @media (max-width: 960px) {
   .sidebar {
@@ -1851,19 +1653,6 @@ kbd {
   }
   .header-context {
     display: none;
-  }
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-  .category-breakdown {
-    grid-template-columns: minmax(160px, 0.8fr) 1fr;
-    gap: 16px;
-  }
-  .category-legend {
-    grid-template-columns: 1fr;
-  }
-  .category-pie .recharts-responsive-container {
-    max-height: none;
   }
   .month-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1975,23 +1764,14 @@ kbd {
   .page-skeleton {
     gap: 16px;
   }
-  .page-intro {
-    margin-bottom: 8px;
-  }
-  .page-intro h2,
   .composer-heading h2 {
     font-size: var(--text-xl);
   }
-  .page-intro p,
   .composer-heading p {
     font-size: var(--text-xs);
   }
   .hero {
     padding: 24px;
-  }
-  .budget-hero-top {
-    display: grid;
-    gap: 24px;
   }
   .hero-number {
     font-size: var(--text-xl);
@@ -2000,22 +1780,6 @@ kbd {
     font-size: var(--text-md);
     display: block;
     margin: 8px 0 0;
-  }
-  .safe-spend {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding: 16px 0 0;
-    text-align: left;
-    gap: 4px;
-  }
-  .safe-spend .stat-value {
-    font-size: var(--text-lg);
-  }
-  .safe-spend .stat-hint {
-    display: none;
-  }
-  .budget-hero-footer {
-    align-items: flex-start;
   }
   .section-head {
     gap: 16px;
@@ -2031,29 +1795,6 @@ kbd {
   }
   .head-actions > .field {
     max-width: 140px;
-  }
-  .category-breakdown {
-    grid-template-columns: minmax(120px, 0.8fr) 1fr;
-    gap: 8px;
-  }
-  .category-legend {
-    gap: 8px;
-  }
-  .category-legend li {
-    flex-wrap: wrap;
-    gap: 0;
-  }
-  .overview-lists {
-    grid-template-columns: 1fr;
-    gap: 24px;
-    padding-top: 8px;
-  }
-  .overview-lists > :last-child .stack-list {
-    grid-template-columns: 1fr;
-  }
-  .compact-list {
-    border-top: 1px solid var(--border);
-    padding-top: 24px;
   }
   .natural-expense-input {
     padding: 16px;
